@@ -477,38 +477,343 @@ function makeOptions(correctText, distractorTexts) {
   return shuffle(options);
 }
 
-function buildQuestionBank() {
+function buildQuestionBank() {  
   const questions = [];
   const pool = SERVICES;
 
+  // ---- Types A, B, C — per service ----
   SERVICES.forEach(svc => {
-    // Type A: Which service does X?
     const distractorsA = pickDistractors(svc, 3, pool);
     questions.push({
-      id: `${svc.id}-A`,
-      category: svc.category,
+      id: `${svc.id}-A`, category: svc.category,
       question: `Which AWS service is used when: "${svc.when}"?`,
       options: makeOptions(svc.name, distractorsA.map(d => d.name)),
     });
 
-    // Type B: What is [Service Name]?
     const distractorsB = pickDistractors(svc, 3, pool);
     questions.push({
-      id: `${svc.id}-B`,
-      category: svc.category,
+      id: `${svc.id}-B`, category: svc.category,
       question: `What is ${svc.name}?`,
       options: makeOptions(svc.what, distractorsB.map(d => d.what)),
     });
 
-    // Type C: Which category does this service belong to?
     const otherCats = shuffle(CATEGORIES.filter(c => c !== svc.category)).slice(0, 3);
     questions.push({
-      id: `${svc.id}-C`,
-      category: svc.category,
+      id: `${svc.id}-C`, category: svc.category,
       question: `${svc.name} belongs to which AWS service category?`,
       options: makeOptions(svc.category, otherCats),
     });
   });
+
+  // ---- Type D — NOT in category (odd one out) ----
+  CATEGORIES.forEach(cat => {
+    const inCat = SERVICES.filter(s => s.category === cat);
+    const outCat = SERVICES.filter(s => s.category !== cat);
+    if (inCat.length >= 3) {
+      const three = shuffle(inCat).slice(0, 3);
+      const outsider = shuffle(outCat)[0];
+      questions.push({
+        id: `D-${cat}`, category: cat,
+        question: `Which of these is NOT a "${cat}" service?`,
+        options: makeOptions(outsider.name, three.map(s => s.name)),
+      });
+    }
+  });
+
+  // ---- Type F — Sub-service / variant questions ----
+  const typeF = [
+    { category:'Compute',
+      question:'Which ELB type handles HTTP/HTTPS traffic with path-based and host-based routing?',
+      options: makeOptions('Application Load Balancer (ALB)',['Network Load Balancer (NLB)','Gateway Load Balancer (GWLB)','Classic Load Balancer (CLB)']) },
+    { category:'Compute',
+      question:'Which ELB type handles TCP/UDP traffic with ultra-high performance and supports static IPs?',
+      options: makeOptions('Network Load Balancer (NLB)',['Application Load Balancer (ALB)','Gateway Load Balancer (GWLB)','Classic Load Balancer (CLB)']) },
+    { category:'Compute',
+      question:'Which ELB type routes traffic through third-party virtual network appliances such as firewalls?',
+      options: makeOptions('Gateway Load Balancer (GWLB)',['Application Load Balancer (ALB)','Network Load Balancer (NLB)','Classic Load Balancer (CLB)']) },
+    { category:'Analytics',
+      question:'Which Amazon Kinesis sub-service provides real-time data streaming with custom consumer control?',
+      options: makeOptions('Kinesis Data Streams',['Kinesis Data Firehose','Kinesis Data Analytics','Amazon MSK']) },
+    { category:'Analytics',
+      question:'Which Amazon Kinesis sub-service automatically delivers streaming data to destinations like S3 or Redshift without code?',
+      options: makeOptions('Kinesis Data Firehose',['Kinesis Data Streams','Kinesis Data Analytics','Amazon SQS']) },
+    { category:'Analytics',
+      question:'Which Amazon Kinesis sub-service lets you run real-time SQL queries on streaming data?',
+      options: makeOptions('Kinesis Data Analytics',['Kinesis Data Streams','Kinesis Data Firehose','Amazon Athena']) },
+    { category:'Management & Governance',
+      question:'Which AWS Systems Manager feature provides browser-based shell access to EC2 without SSH keys or bastion hosts?',
+      options: makeOptions('Session Manager',['Run Command','Patch Manager','Parameter Store']) },
+    { category:'Management & Governance',
+      question:'Which AWS Systems Manager feature automates OS and software patching across a fleet of EC2 instances?',
+      options: makeOptions('Patch Manager',['Session Manager','Run Command','Automation']) },
+    { category:'Management & Governance',
+      question:'Which AWS Systems Manager feature lets you run shell scripts or CLI commands across multiple EC2 instances simultaneously?',
+      options: makeOptions('Run Command',['Session Manager','Patch Manager','Inventory']) },
+    { category:'Storage',
+      question:'Which Amazon FSx variant is optimized for high-performance computing (HPC) and machine learning workloads on Linux?',
+      options: makeOptions('FSx for Lustre',['FSx for Windows File Server','FSx for NetApp ONTAP','FSx for OpenZFS']) },
+    { category:'Storage',
+      question:'Which Amazon FSx variant is the best choice for Windows-based applications that require SMB protocol support?',
+      options: makeOptions('FSx for Windows File Server',['FSx for Lustre','FSx for NetApp ONTAP','Amazon EFS']) },
+  ];
+  typeF.forEach((q, i) => questions.push({ id:`F-${i}`, ...q }));
+
+  // ---- Type G — Works-with architectural pairing ----
+  const typeG = [
+    { category:'Application Integration',
+      question:'You want AWS Lambda to be triggered automatically when a new object is uploaded to S3. Which service coordinates this event-driven connection?',
+      options: makeOptions('Amazon EventBridge',['Amazon SQS','AWS Step Functions','Amazon SNS']) },
+    { category:'Compute',
+      question:'You are running an EC2 instance and need persistent block storage that survives reboots. Which storage service do you attach?',
+      options: makeOptions('Amazon EBS',['Amazon EFS','Amazon S3','AWS Storage Gateway']) },
+    { category:'Storage',
+      question:'Multiple EC2 instances across different Availability Zones need simultaneous read/write access to the same file system. Which storage service fits?',
+      options: makeOptions('Amazon EFS',['Amazon EBS','Amazon S3','Amazon FSx']) },
+    { category:'Networking',
+      question:'You want to cache static assets of your S3-hosted website at edge locations globally to reduce load time. Which service pairs with S3 for this?',
+      options: makeOptions('Amazon CloudFront',['AWS Global Accelerator','Amazon Route 53','AWS PrivateLink']) },
+    { category:'Networking',
+      question:'You are building a serverless REST API backed by AWS Lambda. Which service sits in front to manage, secure, and publish the API endpoints?',
+      options: makeOptions('Amazon API Gateway',['Amazon CloudFront','Elastic Load Balancer','AWS App Mesh']) },
+    { category:'Databases',
+      question:'Your DynamoDB table is being hit with thousands of repeated reads per second. Which service can you add as a caching layer to reduce DynamoDB costs?',
+      options: makeOptions('Amazon ElastiCache',['Amazon RDS','Amazon Redshift','Amazon Aurora']) },
+    { category:'Security',
+      question:'Your Lambda function needs to retrieve a database password at runtime without hardcoding it, and the password must auto-rotate. Which service stores it?',
+      options: makeOptions('AWS Secrets Manager',['AWS KMS','AWS Systems Manager Parameter Store','AWS Certificate Manager']) },
+    { category:'Analytics',
+      question:'You want to query CSV log files stored in S3 using SQL without building a database or loading data anywhere. Which service enables this?',
+      options: makeOptions('Amazon Athena',['Amazon Redshift','AWS Glue','Amazon EMR']) },
+    { category:'Application Integration',
+      question:'You want to fan out one event to multiple downstream systems (email, SMS, Lambda, SQS) simultaneously. Which service handles this pub/sub pattern?',
+      options: makeOptions('Amazon SNS',['Amazon SQS','Amazon EventBridge','AWS Step Functions']) },
+    { category:'Application Integration',
+      question:'Two microservices need to communicate asynchronously so the producer is never blocked waiting for the consumer. Which service decouples them?',
+      options: makeOptions('Amazon SQS',['Amazon SNS','Amazon EventBridge','Amazon MQ']) },
+    { category:'Monitoring & Observability',
+      question:'You need to trace a slow API request through API Gateway, Lambda, and DynamoDB to find which step is the bottleneck. Which service provides this end-to-end trace?',
+      options: makeOptions('AWS X-Ray',['Amazon CloudWatch','AWS CloudTrail','AWS Config']) },
+    { category:'Security',
+      question:'You want to protect your ALB-fronted web app from SQL injection and XSS attacks. Which service do you attach to the ALB?',
+      options: makeOptions('AWS WAF',['AWS Shield','Amazon GuardDuty','AWS Firewall Manager']) },
+    { category:'Management & Governance',
+      question:'You want to define your entire AWS infrastructure (VPC, EC2, RDS) as code so it is version-controlled and reproducible. Which service do you use?',
+      options: makeOptions('AWS CloudFormation',['AWS Systems Manager','AWS Service Catalog','AWS Control Tower']) },
+    { category:'Hybrid & Edge Computing',
+      question:'Your data center needs a dedicated, consistent, low-latency private connection to AWS — NOT over the public internet. Which service provides this?',
+      options: makeOptions('AWS Direct Connect',['AWS VPN','AWS PrivateLink','AWS Global Accelerator']) },
+    { category:'Cost Optimization',
+      question:'Your EC2 workload runs 24/7 for 3 years and is fully predictable. Which purchasing option gives the deepest discount?',
+      options: makeOptions('Reserved Instances',['Spot Instances','AWS Savings Plans','On-Demand Instances']) },
+  ];
+  typeG.forEach((q, i) => questions.push({ id:`G-${i}`, ...q }));
+
+  // ---- Type H — Scenario-based multi-hop ----
+  const typeH = [
+    { category:'Compute',
+      question:'A startup wants to deploy a Node.js web app without worrying about servers, OS patches, or scaling. They just want to push code and have it run. Which service is the best fit?',
+      options: makeOptions('Elastic Beanstalk',['Amazon EC2','Amazon EKS','AWS Batch']) },
+    { category:'Compute',
+      question:'A media company needs to run a 6-hour video transcoding job only on weekends. They want minimum cost and can tolerate interruptions. Which EC2 option is ideal?',
+      options: makeOptions('Spot Instances',['Reserved Instances','On-Demand Instances','Dedicated Hosts']) },
+    { category:'Databases',
+      question:'A social network needs to store and query complex friend-of-friend relationships. Queries like "users who follow users I follow" are common. Which database is purpose-built?',
+      options: makeOptions('Amazon Neptune',['Amazon DynamoDB','Amazon RDS','Amazon DocumentDB']) },
+    { category:'Databases',
+      question:'An IoT platform collects temperature readings from 10,000 sensors every second. Data needs to be stored and queried by time range efficiently. Which database fits best?',
+      options: makeOptions('Amazon Timestream',['Amazon DynamoDB','Amazon RDS','Amazon Redshift']) },
+    { category:'Security',
+      question:'A company needs to download official AWS compliance reports (PCI-DSS, SOC 2) to satisfy an auditor. Where do they go?',
+      options: makeOptions('AWS Artifact',['AWS Security Hub','AWS Config','Amazon Inspector']) },
+    { category:'Storage',
+      question:'A company has 2 petabytes of archive data on-premises. Their internet connection would take months to transfer it. What is the fastest AWS migration option?',
+      options: makeOptions('AWS Snow Family',['AWS DataSync','AWS Transfer Family','AWS Storage Gateway']) },
+    { category:'Analytics',
+      question:'A data team needs to extract data from RDS, transform it, and load it into Redshift for reporting. Which managed service handles this ETL workflow?',
+      options: makeOptions('AWS Glue',['Amazon Athena','Amazon EMR','Amazon Kinesis']) },
+    { category:'Monitoring & Observability',
+      question:'A security team wants to know which IAM user deleted an S3 bucket last Tuesday. Which service recorded this API-level action?',
+      options: makeOptions('AWS CloudTrail',['Amazon CloudWatch','AWS Config','Amazon Detective']) },
+    { category:'Monitoring & Observability',
+      question:'Compliance requires knowing if any EC2 security group was modified in the last 30 days and what it looked like before the change. Which service tracks this?',
+      options: makeOptions('AWS Config',['AWS CloudTrail','Amazon CloudWatch','AWS Trusted Advisor']) },
+    { category:'Application Integration',
+      question:'An order function places orders and a second function sends confirmation emails. The email sender is slow and sometimes fails. How do you prevent email failures from blocking orders?',
+      options: makeOptions('Amazon SQS',['Amazon SNS','AWS Step Functions','Amazon EventBridge']) },
+    { category:'Machine Learning',
+      question:'A developer wants to add an AI chatbot to their app using a pre-trained foundation model — no GPU instances, no training. Which service enables this?',
+      options: makeOptions('Amazon Bedrock',['Amazon SageMaker','Amazon Comprehend','Amazon Rekognition']) },
+    { category:'Machine Learning',
+      question:'A fintech company needs to automatically extract tables and key-value pairs from scanned PDF invoices. Which AWS service is purpose-built for this?',
+      options: makeOptions('Amazon Textract',['Amazon Rekognition','Amazon Comprehend','Amazon SageMaker']) },
+    { category:'Networking',
+      question:'A global SaaS app serves users on 5 continents. Latency is inconsistent because traffic routes unpredictably over the public internet. Which service routes traffic over the AWS backbone instead?',
+      options: makeOptions('AWS Global Accelerator',['Amazon CloudFront','Amazon Route 53','AWS PrivateLink']) },
+    { category:'Cost Optimization',
+      question:'A team wants an alert the moment their monthly AWS bill exceeds $500. Which service should they configure?',
+      options: makeOptions('AWS Budgets',['AWS Cost Explorer','AWS Cost and Usage Report','AWS Pricing Calculator']) },
+    { category:'Management & Governance',
+      question:'A large enterprise has 50 AWS accounts and needs to prevent anyone from disabling CloudTrail in any account. Which service enforces this centrally?',
+      options: makeOptions('AWS Organizations',['AWS Control Tower','AWS Config','AWS Security Hub']) },
+    { category:'Migration & Transfer',
+      question:'A company wants to migrate on-premises Oracle to Amazon Aurora PostgreSQL with minimal downtime while live traffic continues. Which service handles this?',
+      options: makeOptions('AWS Database Migration Service (DMS)',['AWS Application Migration Service','AWS DataSync','AWS Migration Hub']) },
+  ];
+  typeH.forEach((q, i) => questions.push({ id:`H-${i}`, ...q }));
+
+  // ---- Type J — Confusion pairs ----
+  const typeJ = [
+    { category:'Monitoring & Observability',
+      question:'You need an alarm that triggers when EC2 CPU exceeds 80% for 5 minutes. Which service provides metric-based alerting?',
+      options: makeOptions('Amazon CloudWatch',['AWS CloudTrail','AWS Config','AWS X-Ray']) },
+    { category:'Monitoring & Observability',
+      question:'You want an audit log of every API call — who called what, when, from where — across your entire AWS account. Which service provides this?',
+      options: makeOptions('AWS CloudTrail',['Amazon CloudWatch','AWS Config','Amazon Detective']) },
+    { category:'Monitoring & Observability',
+      question:'You want to detect configuration drift: alert when an S3 bucket that should be private becomes public. Which service evaluates this rule continuously?',
+      options: makeOptions('AWS Config',['AWS CloudTrail','Amazon CloudWatch','AWS Security Hub']) },
+    { category:'Application Integration',
+      question:'You need a message queue where each message is processed by exactly ONE consumer. Which service provides this point-to-point model?',
+      options: makeOptions('Amazon SQS',['Amazon SNS','Amazon EventBridge','Amazon MQ']) },
+    { category:'Application Integration',
+      question:'You need to send a notification to 10 different subscribers (Lambda, email, SQS) from a single publish action. Which service supports this fan-out?',
+      options: makeOptions('Amazon SNS',['Amazon SQS','Amazon EventBridge','AWS Step Functions']) },
+    { category:'Application Integration',
+      question:'You want to react to events from 90+ AWS services and route them to targets with filtering rules. Which service is built for event-driven architectures at this scale?',
+      options: makeOptions('Amazon EventBridge',['Amazon SNS','Amazon SQS','AWS Step Functions']) },
+    { category:'Security',
+      question:'Your app needs a database password that must be automatically rotated every 30 days. Which service handles rotation natively?',
+      options: makeOptions('AWS Secrets Manager',['AWS Systems Manager Parameter Store','AWS KMS','AWS Certificate Manager']) },
+    { category:'Security',
+      question:'You want to store non-sensitive config values (feature flags, env names) and a few encrypted strings — no automatic rotation needed. Which is the most cost-effective option?',
+      options: makeOptions('AWS Systems Manager Parameter Store',['AWS Secrets Manager','AWS KMS','Amazon S3']) },
+    { category:'Compute',
+      question:'Your team runs Docker containers and wants AWS to manage the control plane, but does NOT want to deal with Kubernetes at all. Which service is the simplest fit?',
+      options: makeOptions('Amazon ECS',['Amazon EKS','AWS App Runner','Elastic Beanstalk']) },
+    { category:'Compute',
+      question:'Your organization is standardized on Kubernetes and needs to run it on AWS with a managed control plane and full Kubernetes API compatibility. Which service fits?',
+      options: makeOptions('Amazon EKS',['Amazon ECS','AWS App Runner','Elastic Beanstalk']) },
+    { category:'Storage',
+      question:'You need storage for a single EC2 instance — similar to a local hard drive — that persists across reboots. Which storage type is correct?',
+      options: makeOptions('Amazon EBS',['Amazon EFS','Amazon S3','Amazon FSx']) },
+    { category:'Storage',
+      question:'You need a shared file system that 20 EC2 instances across multiple AZs can mount simultaneously using NFS. Which service is designed for this?',
+      options: makeOptions('Amazon EFS',['Amazon EBS','Amazon S3','Amazon FSx']) },
+    { category:'Storage',
+      question:'You need to store billions of objects (images, videos, backups) accessed via HTTP, with no size limit per bucket. Which service is purpose-built for this?',
+      options: makeOptions('Amazon S3',['Amazon EBS','Amazon EFS','Amazon FSx']) },
+    { category:'Databases',
+      question:'You need a fully managed relational database compatible with MySQL/PostgreSQL that delivers up to 5x the throughput of standard MySQL. Which service fits?',
+      options: makeOptions('Amazon Aurora',['Amazon RDS','Amazon DynamoDB','Amazon Redshift']) },
+    { category:'Databases',
+      question:'You need a managed MySQL or PostgreSQL database with automated backups and patching, without needing the extra performance of Aurora. Which is the simpler choice?',
+      options: makeOptions('Amazon RDS',['Amazon Aurora','Amazon DynamoDB','Amazon DocumentDB']) },
+    { category:'Security',
+      question:'You want continuous ML-based analysis of VPC Flow Logs and DNS logs to detect unexpected outbound connections or crypto-mining. Which service does this automatically?',
+      options: makeOptions('Amazon GuardDuty',['Amazon Inspector','Amazon Detective','AWS Security Hub']) },
+    { category:'Security',
+      question:'You want to scan EC2 instances and ECR container images for known CVEs and unintended network exposure. Which service performs this vulnerability assessment?',
+      options: makeOptions('Amazon Inspector',['Amazon GuardDuty','Amazon Detective','Amazon Macie']) },
+    { category:'Hybrid & Edge Computing',
+      question:'You need to connect your corporate data center to AWS over a private dedicated fiber link — not over the public internet — for consistent low latency. Which service?',
+      options: makeOptions('AWS Direct Connect',['AWS VPN','AWS PrivateLink','AWS Storage Gateway']) },
+    { category:'Hybrid & Edge Computing',
+      question:'You need to quickly set up an encrypted connection from your office to your AWS VPC over the existing internet connection, without ordering dedicated hardware. Which service?',
+      options: makeOptions('AWS VPN',['AWS Direct Connect','AWS PrivateLink','AWS Global Accelerator']) },
+    { category:'Cost Optimization',
+      question:'You have committed to running EC2 and Lambda for 1 year. You want flexibility to change instance types and sizes while still getting a discount. Which pricing model fits?',
+      options: makeOptions('AWS Savings Plans',['Reserved Instances','Spot Instances','On-Demand Instances']) },
+  ];
+  typeJ.forEach((q, i) => questions.push({ id:`J-${i}`, ...q }));
+
+  // ---- Type K — True / False (correct statement vs 3 false variations) ----
+  const typeK = [
+    { category:'Compute',
+      question:'Which statement about AWS Lambda is TRUE?',
+      options: makeOptions(
+        'Lambda scales automatically and you pay only for the compute time your code consumes.',
+        ['Lambda requires you to provision and manage the underlying EC2 instances.',
+         'Lambda functions can run indefinitely with no maximum execution time limit.',
+         'Lambda only supports Python and Node.js as runtimes.']) },
+    { category:'Storage',
+      question:'Which statement about Amazon S3 is TRUE?',
+      options: makeOptions(
+        'S3 stores objects with 11 nines (99.999999999%) of durability by default.',
+        ['S3 is a block storage service designed for attaching to EC2 instances.',
+         'S3 objects can only be accessed from within a VPC.',
+         'S3 has a maximum file size of 1 GB per object.']) },
+    { category:'Databases',
+      question:'Which statement about Amazon DynamoDB is TRUE?',
+      options: makeOptions(
+        'DynamoDB is a fully managed NoSQL database that delivers single-digit millisecond performance at any scale.',
+        ['DynamoDB supports complex SQL JOINs across multiple tables natively.',
+         'DynamoDB requires you to choose a fixed instance size when creating a table.',
+         'DynamoDB is only available in a single AWS Region at a time.']) },
+    { category:'Security',
+      question:'Which statement about AWS IAM is TRUE?',
+      options: makeOptions(
+        'IAM is a global service — users, roles, and policies are not region-specific.',
+        ['IAM users are region-scoped and must be created separately per region.',
+         'IAM automatically rotates all user passwords every 90 days.',
+         'IAM roles can only be assumed by human users, not AWS services.']) },
+    { category:'Networking',
+      question:'Which statement about Amazon CloudFront is TRUE?',
+      options: makeOptions(
+        'CloudFront caches content at edge locations worldwide to reduce latency for end users.',
+        ['CloudFront can only serve content stored in Amazon S3.',
+         'CloudFront is a DNS service that routes users to the nearest AWS region.',
+         'CloudFront requires an EC2 origin and does not support S3 as an origin.']) },
+    { category:'Compute',
+      question:'Which statement about Amazon EC2 Spot Instances is TRUE?',
+      options: makeOptions(
+        'Spot Instances use spare EC2 capacity and can be interrupted by AWS with a 2-minute warning.',
+        ['Spot Instances offer no discount compared to On-Demand pricing.',
+         'Spot Instances are guaranteed never to be interrupted once launched.',
+         'Spot Instances require a 1-year or 3-year commitment to use.']) },
+    { category:'Monitoring & Observability',
+      question:'Which statement about AWS CloudTrail is TRUE?',
+      options: makeOptions(
+        'CloudTrail logs management API calls by default and can optionally log data events like S3 object access.',
+        ['CloudTrail monitors CPU and memory metrics for EC2 instances.',
+         'CloudTrail only captures failed API calls, not successful ones.',
+         'CloudTrail logs are only retained for 24 hours unless manually exported.']) },
+    { category:'Security',
+      question:'Which statement about AWS KMS is TRUE?',
+      options: makeOptions(
+        'KMS manages encryption keys and integrates with most AWS services for server-side encryption.',
+        ['KMS stores application secrets like database passwords and API keys with auto-rotation.',
+         'KMS issues SSL/TLS certificates for use with HTTPS endpoints.',
+         'KMS keys are automatically shared across all AWS accounts in an organization.']) },
+    { category:'Application Integration',
+      question:'Which statement about Amazon SQS is TRUE?',
+      options: makeOptions(
+        'SQS is a fully managed message queue where each message is delivered to one consumer.',
+        ['SQS delivers each message to all subscribers simultaneously (fan-out model).',
+         'SQS requires you to manage the underlying message broker infrastructure.',
+         'SQS only supports FIFO queues; standard queues are not available.']) },
+    { category:'Cost Optimization',
+      question:'Which statement about AWS Spot Instances is TRUE?',
+      options: makeOptions(
+        'Spot Instances can offer discounts of up to 90% compared to On-Demand pricing for the same instance.',
+        ['Spot Instances are more expensive than On-Demand but offer better performance guarantees.',
+         'Spot Instances are only available in the us-east-1 region.',
+         'Spot Instances have a fixed price set by AWS that never fluctuates.']) },
+    { category:'Networking',
+      question:'Which statement about Amazon VPC is TRUE?',
+      options: makeOptions(
+        'Each VPC is logically isolated from other VPCs and the internet unless you explicitly configure connectivity.',
+        ['A VPC spans multiple AWS accounts by default without any configuration.',
+         'You can only create one VPC per AWS region.',
+         'VPCs automatically peer with each other using VPC peering without configuration.']) },
+    { category:'Machine Learning',
+      question:'Which statement about Amazon Bedrock is TRUE?',
+      options: makeOptions(
+        'Bedrock provides access to foundation models from multiple providers via API, without managing any ML infrastructure.',
+        ['Bedrock requires you to train your own foundation model from scratch before use.',
+         'Bedrock only supports Amazon\'s own Titan models and no third-party models.',
+         'Bedrock is a service specifically for image recognition and object detection only.']) },
+  ];
+  typeK.forEach((q, i) => questions.push({ id:`K-${i}`, ...q }));
 
   return shuffle(questions);
 }
@@ -517,6 +822,7 @@ function buildQuestionBank() {
 // APP STATE
 // ============================================================
 const COUNTS = [10, 20, 30, 50, 'All'];
+const BANK_SIZE = buildQuestionBank().length;
 
 let state = {
   phase: 'setup',    // 'setup' | 'quiz' | 'summary'
@@ -540,7 +846,6 @@ function render() {
 }
 
 function renderSetup() {
-  const total = SERVICES.length * 3;
   return `
     <div class="setup-card">
       <div class="logo">☁️</div>
@@ -550,7 +855,7 @@ function renderSetup() {
       <div class="count-grid">
         ${COUNTS.map(c => `
           <button class="count-btn ${state.selectedCount === c ? 'selected' : ''}" data-count="${c}">
-            ${c === 'All' ? 'All (~' + total + ')' : c}
+            ${c === 'All' ? 'All (' + BANK_SIZE + ')' : c}
           </button>
         `).join('')}
       </div>
@@ -558,7 +863,7 @@ function renderSetup() {
       <div class="stats-row">
         <div class="stat"><div class="num">108</div><div class="lbl">Services</div></div>
         <div class="stat"><div class="num">15</div><div class="lbl">Categories</div></div>
-        <div class="stat"><div class="num">${total}+</div><div class="lbl">Questions</div></div>
+        <div class="stat"><div class="num">${BANK_SIZE}</div><div class="lbl">Questions</div></div>
       </div>
     </div>`;
 }
