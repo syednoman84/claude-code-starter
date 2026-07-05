@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AWS Services Quiz</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0f1923;
+    color: #e8eaed;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+
+  #app { width: 100%; max-width: 760px; }
+
+  /* ---- SETUP SCREEN ---- */
+  .setup-card {
+    background: #1a2535;
+    border-radius: 16px;
+    padding: 48px 40px;
+    text-align: center;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+  }
+  .setup-card .logo {
+    font-size: 48px;
+    margin-bottom: 12px;
+  }
+  .setup-card h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 8px;
+  }
+  .setup-card .subtitle {
+    color: #8a9bb0;
+    font-size: 1rem;
+    margin-bottom: 36px;
+  }
+  .setup-card label {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #FF9900;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 12px;
+  }
+  .count-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: center;
+    margin-bottom: 36px;
+  }
+  .count-btn {
+    background: #243347;
+    border: 2px solid #2e4060;
+    color: #c8d6e5;
+    padding: 12px 24px;
+    border-radius: 10px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    min-width: 90px;
+  }
+  .count-btn:hover { border-color: #FF9900; color: #fff; }
+  .count-btn.selected { background: #FF9900; border-color: #FF9900; color: #0f1923; }
+
+  .start-btn {
+    background: #FF9900;
+    color: #0f1923;
+    border: none;
+    padding: 14px 48px;
+    border-radius: 10px;
+    font-size: 1.1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+  }
+  .start-btn:hover { background: #e68a00; transform: translateY(-1px); }
+  .start-btn:active { transform: translateY(0); }
+
+  .stats-row {
+    display: flex;
+    justify-content: center;
+    gap: 32px;
+    margin-top: 32px;
+    padding-top: 28px;
+    border-top: 1px solid #243347;
+  }
+  .stat { text-align: center; }
+  .stat .num { font-size: 1.6rem; font-weight: 700; color: #FF9900; }
+  .stat .lbl { font-size: 0.75rem; color: #8a9bb0; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 2px; }
+
+  /* ---- QUIZ SCREEN ---- */
+  .quiz-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .q-counter { font-size: 0.9rem; color: #8a9bb0; font-weight: 600; }
+  .q-score { font-size: 0.9rem; color: #FF9900; font-weight: 700; }
+
+  .progress-bar {
+    background: #1a2535;
+    border-radius: 99px;
+    height: 6px;
+    margin-bottom: 28px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    background: #FF9900;
+    height: 100%;
+    border-radius: 99px;
+    transition: width 0.3s ease;
+  }
+
+  .quiz-card {
+    background: #1a2535;
+    border-radius: 16px;
+    padding: 36px 40px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+    margin-bottom: 16px;
+  }
+  .category-tag {
+    display: inline-block;
+    background: #243347;
+    color: #FF9900;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 4px 10px;
+    border-radius: 6px;
+    margin-bottom: 16px;
+  }
+  .question-text {
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: #fff;
+    line-height: 1.6;
+    margin-bottom: 28px;
+  }
+
+  .options { display: flex; flex-direction: column; gap: 10px; }
+  .option-btn {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: #243347;
+    border: 2px solid #2e4060;
+    border-radius: 10px;
+    padding: 14px 18px;
+    cursor: pointer;
+    text-align: left;
+    color: #c8d6e5;
+    font-size: 0.95rem;
+    line-height: 1.4;
+    transition: all 0.12s;
+  }
+  .option-btn:hover:not(:disabled) { border-color: #FF9900; color: #fff; }
+  .option-btn:disabled { cursor: default; }
+
+  .option-letter {
+    min-width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: #2e4060;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #8a9bb0;
+    flex-shrink: 0;
+    transition: all 0.12s;
+  }
+
+  .option-btn.correct { background: #0d3d2a; border-color: #2ecc71; color: #fff; }
+  .option-btn.correct .option-letter { background: #2ecc71; color: #0f1923; }
+  .option-btn.wrong { background: #3d1515; border-color: #e74c3c; color: #fff; }
+  .option-btn.wrong .option-letter { background: #e74c3c; color: #fff; }
+  .option-btn.selected-wrong { background: #3d1515; border-color: #e74c3c; color: #fff; }
+  .option-btn.reveal-correct { background: #0d3d2a; border-color: #2ecc71; color: #fff; }
+
+  .quiz-footer {
+    display: flex;
+    justify-content: flex-end;
+  }
+  .next-btn {
+    background: #FF9900;
+    color: #0f1923;
+    border: none;
+    padding: 13px 36px;
+    border-radius: 10px;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s, opacity 0.15s;
+  }
+  .next-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .next-btn:not(:disabled):hover { background: #e68a00; }
+
+  /* ---- SUMMARY SCREEN ---- */
+  .summary-card {
+    background: #1a2535;
+    border-radius: 16px;
+    padding: 40px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+  }
+  .summary-card h2 { font-size: 1.6rem; font-weight: 700; color: #fff; margin-bottom: 6px; }
+  .summary-card .sub { color: #8a9bb0; margin-bottom: 28px; }
+
+  .score-circle-wrap { display: flex; justify-content: center; margin-bottom: 32px; }
+  .score-circle {
+    width: 140px;
+    height: 140px;
+    border-radius: 50%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border: 6px solid #FF9900;
+    background: #243347;
+  }
+  .score-circle .big { font-size: 2.2rem; font-weight: 800; color: #FF9900; line-height: 1; }
+  .score-circle .pct { font-size: 0.85rem; color: #8a9bb0; margin-top: 2px; }
+
+  .score-stats {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    margin-bottom: 32px;
+  }
+  .score-stat {
+    flex: 1;
+    max-width: 180px;
+    background: #243347;
+    border-radius: 10px;
+    padding: 16px;
+    text-align: center;
+  }
+  .score-stat .num { font-size: 1.8rem; font-weight: 800; }
+  .score-stat .lbl { font-size: 0.75rem; color: #8a9bb0; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 2px; }
+  .score-stat.correct .num { color: #2ecc71; }
+  .score-stat.wrong .num { color: #e74c3c; }
+
+  .breakdown-title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #8a9bb0;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 12px;
+  }
+
+  .breakdown-list { display: flex; flex-direction: column; gap: 8px; max-height: 420px; overflow-y: auto; padding-right: 4px; margin-bottom: 28px; }
+  .breakdown-list::-webkit-scrollbar { width: 4px; }
+  .breakdown-list::-webkit-scrollbar-track { background: #243347; border-radius: 4px; }
+  .breakdown-list::-webkit-scrollbar-thumb { background: #FF9900; border-radius: 4px; }
+
+  .breakdown-item {
+    background: #243347;
+    border-radius: 10px;
+    padding: 14px 16px;
+    border-left: 4px solid transparent;
+  }
+  .breakdown-item.ok { border-left-color: #2ecc71; }
+  .breakdown-item.bad { border-left-color: #e74c3c; }
+  .bi-q { font-size: 0.9rem; color: #c8d6e5; margin-bottom: 6px; font-weight: 500; }
+  .bi-answers { display: flex; flex-wrap: wrap; gap: 8px; font-size: 0.8rem; }
+  .bi-your { color: #8a9bb0; }
+  .bi-your span { color: #e74c3c; font-weight: 600; }
+  .bi-your.was-correct span { color: #2ecc71; }
+  .bi-correct { color: #8a9bb0; }
+  .bi-correct span { color: #2ecc71; font-weight: 600; }
+  .bi-icon { font-size: 1.1rem; margin-left: auto; }
+
+  .summary-actions { display: flex; gap: 12px; justify-content: center; }
+  .retake-btn {
+    background: #FF9900;
+    color: #0f1923;
+    border: none;
+    padding: 13px 36px;
+    border-radius: 10px;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .retake-btn:hover { background: #e68a00; }
+
+  @media (max-width: 500px) {
+    .quiz-card, .setup-card, .summary-card { padding: 24px 20px; }
+    .setup-card h1 { font-size: 1.5rem; }
+    .question-text { font-size: 1rem; }
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+// ============================================================
+// QUESTION BANK — 15 categories, 108 unique services
+// 3 question types per service (~324 total)
+// ============================================================
+const CATEGORIES = [
+  'Compute','Storage','Databases','Networking','Security',
+  'Monitoring & Observability','Application Integration','Migration & Transfer',
+  'Analytics','Developer Tools','Management & Governance','Cost Optimization',
+  'Hybrid & Edge Computing','Machine Learning','Messaging & Application Services'
+];
+
+// Each service: { id, name, category, what, when }
+const SERVICES = [
+  // ---- COMPUTE ----
+  { id:1,  name:'Amazon EC2',          category:'Compute',    what:'Virtual servers in the cloud',                                                              when:'You need full control over the operating system, software, and networking' },
+  { id:2,  name:'Auto Scaling',        category:'Compute',    what:'Automatically adds or removes EC2 instances based on demand',                              when:'Your application traffic changes throughout the day' },
+  { id:3,  name:'Elastic Load Balancer (ELB)', category:'Compute', what:'Distributes incoming traffic across multiple targets',                               when:'You want high availability and fault tolerance' },
+  { id:4,  name:'AWS Lambda',          category:'Compute',    what:'Runs code without managing servers',                                                        when:'Applications are event-driven, have unpredictable workloads, or need automatic scaling' },
+  { id:5,  name:'Amazon ECS',          category:'Compute',    what:'AWS-managed container orchestration for Docker containers',                                 when:'Running containerized applications without Kubernetes complexity' },
+  { id:6,  name:'Amazon EKS',          category:'Compute',    what:'Managed Kubernetes service',                                                                when:'Your organization uses Kubernetes or needs portability across environments' },
+  { id:7,  name:'AWS App Runner',      category:'Compute',    what:'Managed service to deploy web apps and APIs directly from source code or containers',      when:'You want a simple way to deploy web applications without infrastructure management' },
+  { id:8,  name:'AWS Batch',           category:'Compute',    what:'Executes large-scale batch computing jobs',                                                 when:'Running scheduled, long-running, or scientific processing workloads' },
+  { id:9,  name:'Amazon Lightsail',    category:'Compute',    what:'Simplified VPS with predictable monthly pricing',                                           when:'Hosting small websites, blogs, or development environments' },
+  { id:10, name:'Elastic Beanstalk',   category:'Compute',    what:'Platform-as-a-Service for deploying applications',                                         when:'You want AWS to manage infrastructure while you focus on code' },
+  { id:11, name:'AWS Outposts',        category:'Compute',    what:'AWS infrastructure installed in your own data center',                                      when:'You need AWS services on-premises due to latency or regulatory requirements' },
+  { id:12, name:'Local Zones',         category:'Compute',    what:'AWS infrastructure closer to major metropolitan areas',                                     when:'Low-latency access is required without running your own data center' },
+  { id:13, name:'AWS Wavelength',      category:'Compute',    what:'AWS infrastructure inside 5G telecom networks',                                             when:'Ultra-low latency mobile applications are needed' },
+  // ---- STORAGE ----
+  { id:14, name:'Amazon S3',           category:'Storage',    what:'Highly durable object storage',                                                             when:'Storing files, backups, images, videos, logs, or hosting static websites' },
+  { id:15, name:'Amazon EBS',          category:'Storage',    what:'Persistent block storage attached to EC2',                                                  when:'Running operating systems, databases, or applications on EC2' },
+  { id:16, name:'Amazon EFS',          category:'Storage',    what:'Shared, scalable network file system',                                                      when:'Multiple EC2 instances need concurrent access to the same files' },
+  { id:17, name:'Amazon FSx',          category:'Storage',    what:'Managed file systems optimized for specific workloads',                                     when:'Applications require Windows File Server, Lustre, NetApp ONTAP, or OpenZFS' },
+  { id:18, name:'AWS Storage Gateway', category:'Storage',    what:'Connects on-premises storage with AWS storage services',                                    when:'Migrating to the cloud or extending local storage into AWS' },
+  { id:19, name:'AWS Backup',          category:'Storage',    what:'Centralized backup management across AWS services',                                         when:'You need automated backups with consistent policies' },
+  { id:20, name:'AWS Snow Family',     category:'Storage',    what:'Physical devices for transferring large amounts of data',                                   when:'Network transfer is too slow or unavailable' },
+  { id:21, name:'AWS DataSync',        category:'Storage',    what:'High-speed online data transfer service',                                                   when:'Migrating or synchronizing files between on-premises and AWS' },
+  { id:22, name:'AWS Transfer Family', category:'Storage',    what:'Managed SFTP, FTPS, and FTP service',                                                       when:'Business partners need secure file transfers using traditional protocols' },
+  // ---- DATABASES ----
+  { id:23, name:'Amazon RDS',          category:'Databases',  what:'Managed relational database service',                                                       when:'Applications require SQL databases such as MySQL or PostgreSQL' },
+  { id:24, name:'Amazon Aurora',       category:'Databases',  what:'AWS-designed relational database compatible with MySQL and PostgreSQL',                     when:'You need higher performance and availability than standard RDS engines' },
+  { id:25, name:'Amazon DynamoDB',     category:'Databases',  what:'Fully managed NoSQL key-value/document database',                                          when:'Applications require single-digit millisecond latency at massive scale' },
+  { id:26, name:'Amazon ElastiCache',  category:'Databases',  what:'In-memory cache using Redis or Memcached',                                                  when:'Reducing database load or speeding up frequently accessed data' },
+  { id:27, name:'Amazon Redshift',     category:'Databases',  what:'Data warehouse for analytics',                                                              when:'Running SQL queries against very large datasets' },
+  { id:28, name:'Amazon Neptune',      category:'Databases',  what:'Managed graph database',                                                                    when:'Modeling relationships, such as social networks or recommendation engines' },
+  { id:29, name:'Amazon DocumentDB',   category:'Databases',  what:'MongoDB-compatible document database',                                                     when:'Applications store JSON-style documents' },
+  { id:30, name:'Amazon Keyspaces',    category:'Databases',  what:'Managed Apache Cassandra service',                                                          when:'Applications already use Cassandra' },
+  { id:31, name:'Amazon Timestream',   category:'Databases',  what:'Time-series database',                                                                      when:'Collecting IoT, sensor, or monitoring metrics over time' },
+  { id:32, name:'Amazon QLDB',         category:'Databases',  what:'Immutable ledger database',                                                                 when:'Tracking transactions with a verifiable history' },
+  // ---- NETWORKING ----
+  { id:33, name:'Amazon VPC',          category:'Networking', what:'Your private virtual network in AWS',                                                        when:'Building secure cloud networks with full control over IP addressing and routing' },
+  { id:34, name:'Amazon Route 53',     category:'Networking', what:'Managed DNS and domain registration service',                                               when:'Routing users to applications and providing health-based DNS failover' },
+  { id:35, name:'Amazon CloudFront',   category:'Networking', what:'Global content delivery network (CDN)',                                                     when:'Delivering web content quickly from edge locations worldwide' },
+  { id:36, name:'Amazon API Gateway',  category:'Networking', what:'Managed service for creating, securing, and publishing APIs',                               when:'Building REST, HTTP, or WebSocket APIs, especially for serverless applications' },
+  { id:37, name:'AWS Global Accelerator', category:'Networking', what:'Uses the AWS global network to improve application performance and availability',        when:'Serving users around the world with low latency and fast failover' },
+  { id:38, name:'AWS PrivateLink',     category:'Networking', what:'Private connectivity to AWS services without traversing the public internet',              when:'Secure, private access between VPCs and services' },
+  { id:39, name:'AWS App Mesh',        category:'Networking', what:'Service mesh for microservices',                                                             when:'Managing communication, traffic, and observability between services' },
+  // ---- SECURITY ----
+  { id:40, name:'AWS IAM',             category:'Security',   what:'Identity and access management',                                                            when:'Controlling who can access AWS resources and what actions they can perform' },
+  { id:41, name:'AWS Organizations',   category:'Security',   what:'Centrally manages multiple AWS accounts',                                                   when:'Applying organization-wide governance, billing, and security policies' },
+  { id:42, name:'Amazon Cognito',      category:'Security',   what:'User authentication and identity management for applications',                              when:'Users need to sign up, sign in, and authenticate with your application' },
+  { id:43, name:'AWS Directory Service', category:'Security', what:'Managed Microsoft Active Directory',                                                        when:'Integrating AWS resources with existing Active Directory environments' },
+  { id:44, name:'AWS KMS',             category:'Security',   what:'Managed encryption key service',                                                            when:'Encrypting AWS data and managing cryptographic keys' },
+  { id:45, name:'AWS Secrets Manager', category:'Security',   what:'Secure storage for secrets such as passwords and API keys',                                when:'Applications need automatic secret rotation and secure retrieval' },
+  { id:46, name:'AWS Systems Manager Parameter Store', category:'Security', what:'Stores configuration values and optional encrypted parameters',              when:'Managing application configuration and non-rotating secrets' },
+  { id:47, name:'AWS Certificate Manager (ACM)', category:'Security', what:'Issues and manages SSL/TLS certificates',                                          when:'Enabling HTTPS for websites and APIs' },
+  { id:48, name:'AWS Shield',          category:'Security',   what:'Protection against DDoS attacks',                                                           when:'Public-facing applications require network-level attack protection' },
+  { id:49, name:'AWS WAF',             category:'Security',   what:'Web Application Firewall',                                                                  when:'Blocking SQL injection, cross-site scripting, bots, and other web attacks' },
+  { id:50, name:'AWS Firewall Manager', category:'Security',  what:'Centralized management of firewall and security policies',                                  when:'Enforcing consistent security rules across multiple AWS accounts' },
+  { id:51, name:'Amazon GuardDuty',    category:'Security',   what:'Threat detection service using AWS logs and machine learning',                              when:'Continuously monitoring for suspicious activity' },
+  { id:52, name:'Amazon Inspector',    category:'Security',   what:'Automated vulnerability assessment service',                                                when:'Scanning EC2 instances and container images for security issues' },
+  { id:53, name:'Amazon Detective',    category:'Security',   what:'Investigation service for security findings',                                               when:'Analyzing the root cause of security incidents' },
+  { id:54, name:'Amazon Macie',        category:'Security',   what:'Discovers and protects sensitive data in S3',                                               when:'Identifying personally identifiable information (PII) and compliance risks' },
+  { id:55, name:'AWS Security Hub',    category:'Security',   what:'Central dashboard for AWS security findings',                                               when:'Aggregating and prioritizing security alerts from multiple AWS services' },
+  { id:56, name:'AWS Artifact',        category:'Security',   what:'Repository of AWS compliance reports and agreements',                                       when:'Demonstrating regulatory compliance or reviewing AWS certifications' },
+  { id:57, name:'AWS IAM Identity Center', category:'Security', what:'Centralized single sign-on (SSO) for AWS accounts and applications',                    when:'Providing users with one identity to access multiple AWS accounts and integrated apps' },
+  // ---- MONITORING ----
+  { id:58, name:'Amazon CloudWatch',   category:'Monitoring & Observability', what:'AWS monitoring service for metrics, logs, alarms, and dashboards',          when:'Monitoring application health, infrastructure performance, and setting alerts' },
+  { id:59, name:'AWS CloudTrail',      category:'Monitoring & Observability', what:'Records every API call made in your AWS account',                           when:'Auditing, security investigations, and compliance' },
+  { id:60, name:'AWS Config',          category:'Monitoring & Observability', what:'Tracks AWS resource configurations and changes over time',                  when:'Auditing configuration changes and ensuring compliance' },
+  { id:61, name:'AWS Trusted Advisor', category:'Monitoring & Observability', what:'Provides recommendations for cost, security, performance, and fault tolerance', when:'Reviewing AWS best practices' },
+  { id:62, name:'AWS X-Ray',           category:'Monitoring & Observability', what:'Distributed tracing service for applications',                              when:'Finding performance bottlenecks in microservices and serverless applications' },
+  { id:63, name:'AWS Health Dashboard', category:'Monitoring & Observability', what:'Displays AWS service issues and account-specific events',                  when:'Checking if AWS outages or maintenance are affecting your resources' },
+  // ---- APP INTEGRATION ----
+  { id:64, name:'Amazon SQS',          category:'Application Integration', what:'Fully managed message queue',                                                  when:'Decoupling applications so components communicate asynchronously' },
+  { id:65, name:'Amazon SNS',          category:'Application Integration', what:'Publish/subscribe messaging service',                                          when:'Sending one message to many subscribers (email, SMS, Lambda, SQS, HTTP)' },
+  { id:66, name:'Amazon EventBridge',  category:'Application Integration', what:'Event bus for routing events between AWS services and applications',           when:'Building event-driven architectures' },
+  { id:67, name:'AWS Step Functions',  category:'Application Integration', what:'Workflow orchestration service',                                               when:'Coordinating multiple Lambda functions or AWS services into business workflows' },
+  { id:68, name:'Amazon MQ',           category:'Application Integration', what:'Managed ActiveMQ and RabbitMQ broker',                                        when:'Migrating legacy applications that already use traditional message brokers' },
+  // ---- MIGRATION ----
+  { id:69, name:'AWS Database Migration Service (DMS)', category:'Migration & Transfer', what:'Migrates databases with minimal downtime',                      when:'Moving databases to AWS or between database engines' },
+  { id:70, name:'AWS Application Migration Service', category:'Migration & Transfer', what:'Migrates physical or virtual servers to AWS',                       when:'Performing lift-and-shift migrations' },
+  { id:71, name:'AWS Migration Hub',   category:'Migration & Transfer', what:'Central dashboard for migration projects',                                        when:'Tracking multiple migrations across AWS migration services' },
+  { id:72, name:'AWS Application Discovery Service', category:'Migration & Transfer', what:'Discovers on-premises servers and dependencies',                   when:'Planning cloud migrations' },
+  // ---- ANALYTICS ----
+  { id:73, name:'Amazon Athena',       category:'Analytics',  what:'Serverless SQL query service for data stored in S3',                                       when:'Analyzing log files or datasets without loading them into a database' },
+  { id:74, name:'AWS Glue',            category:'Analytics',  what:'Serverless ETL service and data catalog',                                                  when:'Preparing and moving data for analytics' },
+  { id:75, name:'Amazon EMR',          category:'Analytics',  what:'Managed Hadoop and Spark cluster service',                                                  when:'Running large-scale big data processing jobs' },
+  { id:76, name:'Amazon Kinesis',      category:'Analytics',  what:'Real-time data streaming platform',                                                         when:'Processing streaming data such as clickstreams, IoT, or logs' },
+  { id:77, name:'Amazon OpenSearch Service', category:'Analytics', what:'Managed search and analytics engine',                                                 when:'Full-text search, log analytics, and dashboards' },
+  { id:78, name:'AWS Lake Formation',  category:'Analytics',  what:'Builds and manages secure data lakes',                                                      when:'Centralizing large datasets for analytics' },
+  { id:79, name:'Amazon QuickSight',   category:'Analytics',  what:'Business intelligence and visualization service',                                           when:'Creating dashboards and reports from AWS data' },
+  // ---- DEV TOOLS ----
+  { id:80, name:'AWS CodeCommit',      category:'Developer Tools', what:'Managed Git repository service',                                                      when:'Hosting source code repositories on AWS' },
+  { id:81, name:'AWS CodeBuild',       category:'Developer Tools', what:'Managed build service',                                                               when:'Compiling code, running tests, and producing build artifacts' },
+  { id:82, name:'AWS CodeDeploy',      category:'Developer Tools', what:'Automated deployment service',                                                        when:'Deploying applications to EC2, Lambda, or on-premises servers' },
+  { id:83, name:'AWS CodePipeline',    category:'Developer Tools', what:'Continuous Integration and Continuous Delivery (CI/CD) pipeline',                    when:'Automating software release processes' },
+  { id:84, name:'AWS Cloud9',          category:'Developer Tools', what:'Cloud-based integrated development environment (IDE)',                                when:'Developing directly from a browser' },
+  // ---- MGMT & GOVERNANCE ----
+  { id:85, name:'AWS CloudFormation',  category:'Management & Governance', what:'Infrastructure as Code service using YAML or JSON templates',                 when:'Automating and version-controlling AWS infrastructure' },
+  { id:86, name:'AWS Systems Manager', category:'Management & Governance', what:'Central management service for AWS resources',                                when:'Managing EC2 instances, patching, automation, inventory, and remote access' },
+  { id:87, name:'AWS Service Catalog', category:'Management & Governance', what:'Approved catalog of AWS resources for organizations',                         when:'Standardizing infrastructure deployments' },
+  { id:88, name:'AWS Control Tower',   category:'Management & Governance', what:'Automates multi-account AWS landing zones',                                   when:'Setting up secure enterprise AWS environments' },
+  { id:89, name:'AWS License Manager', category:'Management & Governance', what:'Tracks and manages software licenses',                                        when:'Controlling Microsoft, Oracle, or other commercial licenses' },
+  { id:90, name:'AWS Compute Optimizer', category:'Management & Governance', what:'Recommends better-sized compute resources',                                 when:'Reducing costs by right-sizing EC2, Lambda, EBS, and Auto Scaling' },
+  { id:91, name:'AWS Resource Groups', category:'Management & Governance', what:'Groups AWS resources by tags or criteria',                                    when:'Managing related resources together' },
+  // ---- COST OPTIMIZATION ----
+  { id:92, name:'AWS Cost Explorer',   category:'Cost Optimization', what:'Visualizes AWS spending over time',                                                  when:'Understanding where your AWS costs come from' },
+  { id:93, name:'AWS Budgets',         category:'Cost Optimization', what:'Alerts when spending exceeds thresholds',                                            when:'Preventing unexpected AWS bills' },
+  { id:94, name:'AWS Cost and Usage Report', category:'Cost Optimization', what:'Detailed billing data exported to S3',                                        when:'Performing advanced cost analysis' },
+  { id:95, name:'AWS Savings Plans',   category:'Cost Optimization', what:'Flexible pricing model offering discounts for committed usage',                     when:'Running predictable workloads over one or three years' },
+  { id:96, name:'Reserved Instances',  category:'Cost Optimization', what:'Discounts for committing to specific EC2 or RDS capacity',                          when:'Long-running, steady workloads' },
+  { id:97, name:'Spot Instances',      category:'Cost Optimization', what:'Unused EC2 capacity at significant discounts',                                      when:'Fault-tolerant workloads that can handle interruptions' },
+  { id:98, name:'AWS Pricing Calculator', category:'Cost Optimization', what:'Estimates AWS costs before deployment',                                          when:'Planning infrastructure budgets' },
+  // ---- HYBRID & EDGE ----
+  { id:99,  name:'AWS Direct Connect', category:'Hybrid & Edge Computing', what:'Dedicated private network connection to AWS',                                 when:'Needing consistent, low-latency connectivity between on-premises and AWS' },
+  { id:100, name:'AWS VPN',            category:'Hybrid & Edge Computing', what:'Encrypted tunnel over the internet to AWS',                                   when:'Securely connecting on-premises networks to AWS without dedicated circuits' },
+  // Storage Gateway and Snow Family already listed; not duplicating — they appear in Storage category
+  // ---- MACHINE LEARNING ----
+  { id:101, name:'Amazon SageMaker',   category:'Machine Learning', what:'End-to-end machine learning platform',                                               when:'Building, training, and deploying ML models' },
+  { id:102, name:'Amazon Bedrock',     category:'Machine Learning', what:'Managed service for building generative AI applications using foundation models',    when:'Developing AI assistants, chatbots, summarization, or content generation without managing model infrastructure' },
+  { id:103, name:'Amazon Rekognition', category:'Machine Learning', what:'Image and video analysis service',                                                    when:'Detecting faces, objects, text, or unsafe content' },
+  { id:104, name:'Amazon Comprehend',  category:'Machine Learning', what:'Natural language processing (NLP) service',                                          when:'Extracting entities, sentiment, or key phrases from text' },
+  { id:105, name:'Amazon Textract',    category:'Machine Learning', what:'Extracts text and structured data from scanned documents',                           when:'Processing invoices, forms, receipts, and PDFs' },
+  // ---- MESSAGING & APP SERVICES ----
+  { id:106, name:'Amazon SES',         category:'Messaging & Application Services', what:'Cloud email service',                                                 when:'Sending transactional or marketing emails from applications' },
+  { id:107, name:'Amazon Pinpoint',    category:'Messaging & Application Services', what:'Customer engagement platform',                                        when:'Sending personalized email, SMS, push notifications, and running marketing campaigns' },
+  { id:108, name:'AWS AppSync',        category:'Messaging & Application Services', what:'Managed GraphQL API service',                                         when:'Building GraphQL APIs with real-time data synchronization for web and mobile applications' },
+];
+
+// ============================================================
+// QUESTION GENERATION
+// ============================================================
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function pickDistractors(correctService, count, pool) {
+  // prefer same category first, then any
+  const sameCat = pool.filter(s => s.id !== correctService.id && s.category === correctService.category);
+  const otherCat = pool.filter(s => s.id !== correctService.id && s.category !== correctService.category);
+  const ordered = shuffle(sameCat).concat(shuffle(otherCat));
+  return ordered.slice(0, count);
+}
+
+function makeOptions(correctText, distractorTexts) {
+  const options = [
+    { text: correctText, correct: true },
+    ...distractorTexts.map(t => ({ text: t, correct: false }))
+  ];
+  return shuffle(options);
+}
+
+function buildQuestionBank() {
+  const questions = [];
+  const pool = SERVICES;
+
+  SERVICES.forEach(svc => {
+    // Type A: Which service does X?
+    const distractorsA = pickDistractors(svc, 3, pool);
+    questions.push({
+      id: `${svc.id}-A`,
+      category: svc.category,
+      question: `Which AWS service is used when: "${svc.when}"?`,
+      options: makeOptions(svc.name, distractorsA.map(d => d.name)),
+    });
+
+    // Type B: What is [Service Name]?
+    const distractorsB = pickDistractors(svc, 3, pool);
+    questions.push({
+      id: `${svc.id}-B`,
+      category: svc.category,
+      question: `What is ${svc.name}?`,
+      options: makeOptions(svc.what, distractorsB.map(d => d.what)),
+    });
+
+    // Type C: Which category does this service belong to?
+    const otherCats = shuffle(CATEGORIES.filter(c => c !== svc.category)).slice(0, 3);
+    questions.push({
+      id: `${svc.id}-C`,
+      category: svc.category,
+      question: `${svc.name} belongs to which AWS service category?`,
+      options: makeOptions(svc.category, otherCats),
+    });
+  });
+
+  return shuffle(questions);
+}
+
+// ============================================================
+// APP STATE
+// ============================================================
+const COUNTS = [10, 20, 30, 50, 'All'];
+
+let state = {
+  phase: 'setup',    // 'setup' | 'quiz' | 'summary'
+  selectedCount: 20,
+  allQuestions: [],
+  questions: [],     // active question set for this session
+  current: 0,
+  answers: [],       // { question, chosen, correct, wasCorrect }
+  answered: false,
+};
+
+// ============================================================
+// RENDER
+// ============================================================
+function render() {
+  const app = document.getElementById('app');
+  if (state.phase === 'setup') app.innerHTML = renderSetup();
+  else if (state.phase === 'quiz') app.innerHTML = renderQuiz();
+  else app.innerHTML = renderSummary();
+  attachListeners();
+}
+
+function renderSetup() {
+  const total = SERVICES.length * 3;
+  return `
+    <div class="setup-card">
+      <div class="logo">☁️</div>
+      <h1>AWS Services Quiz</h1>
+      <p class="subtitle">Test your knowledge of all 108 AWS services across 15 categories</p>
+      <label>How many questions?</label>
+      <div class="count-grid">
+        ${COUNTS.map(c => `
+          <button class="count-btn ${state.selectedCount === c ? 'selected' : ''}" data-count="${c}">
+            ${c === 'All' ? 'All (~' + total + ')' : c}
+          </button>
+        `).join('')}
+      </div>
+      <button class="start-btn" id="startBtn">Start Quiz →</button>
+      <div class="stats-row">
+        <div class="stat"><div class="num">108</div><div class="lbl">Services</div></div>
+        <div class="stat"><div class="num">15</div><div class="lbl">Categories</div></div>
+        <div class="stat"><div class="num">${total}+</div><div class="lbl">Questions</div></div>
+      </div>
+    </div>`;
+}
+
+function renderQuiz() {
+  const q = state.questions[state.current];
+  const total = state.questions.length;
+  const pct = Math.round((state.current / total) * 100);
+  const letters = ['A', 'B', 'C', 'D'];
+
+  const optionsHtml = q.options.map((opt, i) => {
+    let cls = 'option-btn';
+    if (state.answered) {
+      if (opt.correct) cls += ' correct';
+      else if (i === state.chosenIndex) cls += ' wrong';
+    }
+    return `
+      <button class="option-btn ${state.answered ? (opt.correct ? 'correct' : (i === state.chosenIndex ? 'wrong' : '')) : ''}"
+              data-idx="${i}" ${state.answered ? 'disabled' : ''}>
+        <span class="option-letter">${letters[i]}</span>
+        <span>${opt.text}</span>
+      </button>`;
+  }).join('');
+
+  const score = state.answers.filter(a => a.wasCorrect).length;
+
+  return `
+    <div class="quiz-header">
+      <span class="q-counter">Question ${state.current + 1} of ${total}</span>
+      <span class="q-score">Score: ${score} / ${state.current}</span>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+    <div class="quiz-card">
+      <span class="category-tag">${q.category}</span>
+      <div class="question-text">${q.question}</div>
+      <div class="options">${optionsHtml}</div>
+    </div>
+    <div class="quiz-footer">
+      <button class="next-btn" id="nextBtn" ${!state.answered ? 'disabled' : ''}>
+        ${state.current + 1 === total ? 'See Results' : 'Next →'}
+      </button>
+    </div>`;
+}
+
+function renderSummary() {
+  const total = state.answers.length;
+  const correct = state.answers.filter(a => a.wasCorrect).length;
+  const wrong = total - correct;
+  const pct = Math.round((correct / total) * 100);
+
+  const breakdownHtml = state.answers.map((a, i) => {
+    const yourText = a.chosen ? a.chosen.text : '(not answered)';
+    const correctText = a.options.find(o => o.correct).text;
+    return `
+      <div class="breakdown-item ${a.wasCorrect ? 'ok' : 'bad'}">
+        <div class="bi-q">${i + 1}. ${a.question}</div>
+        <div class="bi-answers">
+          <span class="bi-your ${a.wasCorrect ? 'was-correct' : ''}">Your answer: <span>${yourText}</span></span>
+          ${!a.wasCorrect ? `<span class="bi-correct">Correct: <span>${correctText}</span></span>` : ''}
+          <span class="bi-icon">${a.wasCorrect ? '✅' : '❌'}</span>
+        </div>
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="summary-card">
+      <h2>Quiz Complete!</h2>
+      <p class="sub">Here's how you did</p>
+      <div class="score-circle-wrap">
+        <div class="score-circle">
+          <span class="big">${pct}%</span>
+          <span class="pct">${correct} / ${total}</span>
+        </div>
+      </div>
+      <div class="score-stats">
+        <div class="score-stat correct">
+          <div class="num">${correct}</div>
+          <div class="lbl">Correct</div>
+        </div>
+        <div class="score-stat wrong">
+          <div class="num">${wrong}</div>
+          <div class="lbl">Wrong</div>
+        </div>
+      </div>
+      <div class="breakdown-title">Answer Breakdown</div>
+      <div class="breakdown-list">${breakdownHtml}</div>
+      <div class="summary-actions">
+        <button class="retake-btn" id="retakeBtn">↩ Retake Quiz</button>
+      </div>
+    </div>`;
+}
+
+// ============================================================
+// EVENT LISTENERS
+// ============================================================
+function attachListeners() {
+  if (state.phase === 'setup') {
+    document.querySelectorAll('.count-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const val = btn.dataset.count;
+        state.selectedCount = val === 'All' ? 'All' : parseInt(val, 10);
+        render();
+      });
+    });
+    document.getElementById('startBtn').addEventListener('click', startQuiz);
+  }
+
+  if (state.phase === 'quiz') {
+    if (!state.answered) {
+      document.querySelectorAll('.option-btn').forEach((btn, i) => {
+        btn.addEventListener('click', () => selectAnswer(i));
+      });
+    }
+    const nextBtn = document.getElementById('nextBtn');
+    if (nextBtn && state.answered) {
+      nextBtn.addEventListener('click', nextQuestion);
+    }
+  }
+
+  if (state.phase === 'summary') {
+    document.getElementById('retakeBtn').addEventListener('click', () => {
+      state.phase = 'setup';
+      state.answers = [];
+      state.current = 0;
+      state.answered = false;
+      render();
+    });
+  }
+}
+
+// ============================================================
+// ACTIONS
+// ============================================================
+function startQuiz() {
+  if (state.allQuestions.length === 0) {
+    state.allQuestions = buildQuestionBank();
+  }
+  const count = state.selectedCount === 'All' ? state.allQuestions.length : state.selectedCount;
+  // rebuild shuffled questions each time
+  const fresh = buildQuestionBank();
+  state.questions = fresh.slice(0, Math.min(count, fresh.length));
+  state.current = 0;
+  state.answers = [];
+  state.answered = false;
+  state.phase = 'quiz';
+  render();
+}
+
+function selectAnswer(idx) {
+  if (state.answered) return;
+  const q = state.questions[state.current];
+  const chosen = q.options[idx];
+  const wasCorrect = chosen.correct;
+
+  state.chosenIndex = idx;
+  state.answered = true;
+  state.answers.push({
+    question: q.question,
+    category: q.category,
+    options: q.options,
+    chosen,
+    wasCorrect,
+  });
+  render();
+}
+
+function nextQuestion() {
+  if (state.current + 1 >= state.questions.length) {
+    state.phase = 'summary';
+    render();
+    return;
+  }
+  state.current++;
+  state.answered = false;
+  state.chosenIndex = null;
+  render();
+}
+
+// ============================================================
+// BOOT
+// ============================================================
+render();
+</script>
+</body>
+</html>
