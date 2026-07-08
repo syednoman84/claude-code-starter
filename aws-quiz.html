@@ -299,10 +299,127 @@
   }
   .retake-btn:hover { background: #e68a00; }
 
+  /* ---- STUDY MODE ---- */
+  .study-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .study-header h2 { font-size: 1.4rem; font-weight: 700; color: #fff; }
+  .study-header-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+  .ghost-btn {
+    background: transparent;
+    color: #8a9bb0;
+    border: 2px solid #2e4060;
+    padding: 10px 22px;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .ghost-btn:hover { border-color: #FF9900; color: #fff; }
+
+  .study-filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+  .filter-pill {
+    background: #243347;
+    border: 2px solid #2e4060;
+    color: #8a9bb0;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.12s;
+    white-space: nowrap;
+  }
+  .filter-pill:hover { border-color: #FF9900; color: #fff; }
+  .filter-pill.active { background: #FF9900; border-color: #FF9900; color: #0f1923; }
+
+  .study-count {
+    font-size: 0.82rem;
+    color: #8a9bb0;
+    margin-bottom: 14px;
+  }
+
+  .study-list { display: flex; flex-direction: column; gap: 10px; }
+
+  .study-item {
+    background: #1a2535;
+    border-radius: 12px;
+    padding: 18px 20px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+  }
+  .study-item-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .study-q-num {
+    min-width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: #243347;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #8a9bb0;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .study-q-text { font-size: 0.95rem; font-weight: 600; color: #fff; line-height: 1.5; flex: 1; }
+  .study-options { display: flex; flex-direction: column; gap: 6px; margin-left: 36px; }
+  .study-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    color: #8a9bb0;
+    background: #243347;
+  }
+  .study-option.is-correct {
+    background: #0d3d2a;
+    color: #fff;
+    font-weight: 600;
+  }
+  .study-option-letter {
+    min-width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #2e4060;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: #8a9bb0;
+    flex-shrink: 0;
+  }
+  .study-option.is-correct .study-option-letter {
+    background: #2ecc71;
+    color: #0f1923;
+  }
+  .study-option-check { margin-left: auto; font-size: 0.85rem; flex-shrink: 0; }
+
   @media (max-width: 500px) {
     .quiz-card, .setup-card, .summary-card { padding: 24px 20px; }
     .setup-card h1 { font-size: 1.5rem; }
     .question-text { font-size: 1rem; }
+    .study-options { margin-left: 0; }
   }
 </style>
 </head>
@@ -825,13 +942,14 @@ const COUNTS = [10, 20, 30, 50, 'All'];
 const BANK_SIZE = buildQuestionBank().length;
 
 let state = {
-  phase: 'setup',    // 'setup' | 'quiz' | 'summary'
+  phase: 'setup',    // 'setup' | 'quiz' | 'summary' | 'study'
   selectedCount: 20,
   allQuestions: [],
   questions: [],     // active question set for this session
   current: 0,
   answers: [],       // { question, chosen, correct, wasCorrect }
   answered: false,
+  studyFilter: 'All',
 };
 
 // ============================================================
@@ -841,6 +959,7 @@ function render() {
   const app = document.getElementById('app');
   if (state.phase === 'setup') app.innerHTML = renderSetup();
   else if (state.phase === 'quiz') app.innerHTML = renderQuiz();
+  else if (state.phase === 'study') app.innerHTML = renderStudy();
   else app.innerHTML = renderSummary();
   attachListeners();
 }
@@ -859,7 +978,10 @@ function renderSetup() {
           </button>
         `).join('')}
       </div>
-      <button class="start-btn" id="startBtn">Start Quiz →</button>
+      <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+        <button class="start-btn" id="startBtn">Start Quiz →</button>
+        <button class="start-btn" id="studyBtn" style="background:#243347;color:#FF9900;border:2px solid #FF9900;">📖 Study Mode</button>
+      </div>
       <div class="stats-row">
         <div class="stat"><div class="num">108</div><div class="lbl">Services</div></div>
         <div class="stat"><div class="num">15</div><div class="lbl">Categories</div></div>
@@ -952,8 +1074,54 @@ function renderSummary() {
       <div class="breakdown-list">${breakdownHtml}</div>
       <div class="summary-actions">
         <button class="retake-btn" id="retakeBtn">↩ Retake Quiz</button>
+        <button class="retake-btn" id="studyFromSummaryBtn" style="background:#243347;color:#FF9900;border:2px solid #FF9900;">📖 Study Mode</button>
       </div>
     </div>`;
+}
+
+function renderStudy() {
+  if (state.allQuestions.length === 0) state.allQuestions = buildQuestionBank();
+
+  const allCats = ['All', ...CATEGORIES];
+  const filtered = state.studyFilter === 'All'
+    ? state.allQuestions
+    : state.allQuestions.filter(q => q.category === state.studyFilter);
+
+  const filterHtml = allCats.map(c => `
+    <button class="filter-pill ${state.studyFilter === c ? 'active' : ''}" data-cat="${c}">${c}</button>
+  `).join('');
+
+  const listHtml = filtered.map((q, i) => {
+    const correctText = q.options.find(o => o.correct).text;
+    return `
+      <div class="study-item">
+        <div class="study-item-header">
+          <span class="study-q-num">${i + 1}</span>
+          <div>
+            <span class="category-tag" style="margin-bottom:6px;display:inline-block;">${q.category}</span>
+            <div class="study-q-text">${q.question}</div>
+          </div>
+        </div>
+        <div class="study-options">
+          <div class="study-option is-correct">
+            <span class="study-option-letter">✓</span>
+            <span>${correctText}</span>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="study-header">
+      <h2>📖 Study Mode</h2>
+      <div class="study-header-actions">
+        <button class="ghost-btn" id="backToSetupBtn">← Back to Home</button>
+        <button class="start-btn" id="goQuizBtn" style="padding:10px 24px;font-size:0.9rem;">Start Quiz →</button>
+      </div>
+    </div>
+    <div class="study-filter-bar">${filterHtml}</div>
+    <div class="study-count">Showing ${filtered.length} of ${state.allQuestions.length} questions</div>
+    <div class="study-list">${listHtml}</div>`;
 }
 
 // ============================================================
@@ -969,6 +1137,26 @@ function attachListeners() {
       });
     });
     document.getElementById('startBtn').addEventListener('click', startQuiz);
+    document.getElementById('studyBtn').addEventListener('click', () => {
+      if (state.allQuestions.length === 0) state.allQuestions = buildQuestionBank();
+      state.phase = 'study';
+      state.studyFilter = 'All';
+      render();
+    });
+  }
+
+  if (state.phase === 'study') {
+    document.getElementById('backToSetupBtn').addEventListener('click', () => {
+      state.phase = 'setup';
+      render();
+    });
+    document.getElementById('goQuizBtn').addEventListener('click', startQuiz);
+    document.querySelectorAll('.filter-pill').forEach(pill => {
+      pill.addEventListener('click', () => {
+        state.studyFilter = pill.dataset.cat;
+        render();
+      });
+    });
   }
 
   if (state.phase === 'quiz') {
@@ -989,6 +1177,11 @@ function attachListeners() {
       state.answers = [];
       state.current = 0;
       state.answered = false;
+      render();
+    });
+    document.getElementById('studyFromSummaryBtn').addEventListener('click', () => {
+      state.phase = 'study';
+      state.studyFilter = 'All';
       render();
     });
   }
