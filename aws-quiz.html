@@ -415,11 +415,29 @@
   }
   .study-option-check { margin-left: auto; font-size: 0.85rem; flex-shrink: 0; }
 
+  .show-answer-btn {
+    background: transparent;
+    color: #8a9bb0;
+    border: 1px solid #2e4060;
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    margin-left: 36px;
+    margin-bottom: 4px;
+    display: inline-block;
+  }
+  .show-answer-btn:hover { border-color: #FF9900; color: #FF9900; }
+  .show-answer-btn.revealed { color: #FF9900; border-color: #FF9900; }
+
   @media (max-width: 500px) {
     .quiz-card, .setup-card, .summary-card { padding: 24px 20px; }
     .setup-card h1 { font-size: 1.5rem; }
     .question-text { font-size: 1rem; }
     .study-options { margin-left: 0; }
+    .show-answer-btn { margin-left: 0; }
   }
 </style>
 </head>
@@ -1079,13 +1097,57 @@ function renderSummary() {
     </div>`;
 }
 
+const AWS_ACRONYMS = {
+  'EBS': 'Elastic Block Store',
+  'EKS': 'Elastic Kubernetes Service',
+  'ECS': 'Elastic Container Service',
+  'EFS': 'Elastic File System',
+  'ELB': 'Elastic Load Balancer',
+  'ALB': 'Application Load Balancer',
+  'NLB': 'Network Load Balancer',
+  'GWLB': 'Gateway Load Balancer',
+  'CLB': 'Classic Load Balancer',
+  'RDS': 'Relational Database Service',
+  'IAM': 'Identity and Access Management',
+  'KMS': 'Key Management Service',
+  'ACM': 'AWS Certificate Manager',
+  'WAF': 'Web Application Firewall',
+  'VPC': 'Virtual Private Cloud',
+  'CDN': 'Content Delivery Network',
+  'SQS': 'Simple Queue Service',
+  'SNS': 'Simple Notification Service',
+  'SES': 'Simple Email Service',
+  'EMR': 'Elastic MapReduce',
+  'EC2': 'Elastic Compute Cloud',
+  'S3': 'Simple Storage Service',
+  'DMS': 'Database Migration Service',
+  'SSO': 'Single Sign-On',
+  'QLDB': 'Quantum Ledger Database',
+  'VPN': 'Virtual Private Network',
+  'DNS': 'Domain Name System',
+  'HPC': 'High-Performance Computing',
+  'PII': 'Personally Identifiable Information',
+  'CVE': 'Common Vulnerabilities and Exposures',
+};
+
+function expandAcronym(text) {
+  return text.replace(/\b(Amazon|AWS)\s+([A-Z][A-Z0-9]+)\b(?!\s*\()/g, (match, prefix, acronym) => {
+    if (AWS_ACRONYMS[acronym]) {
+      return `${prefix} ${AWS_ACRONYMS[acronym]} (${acronym})`;
+    }
+    return match;
+  });
+}
+
 function renderStudy() {
   if (state.allQuestions.length === 0) state.allQuestions = buildQuestionBank();
+  if (!state.studyRevealedAnswers) state.studyRevealedAnswers = {};
 
   const allCats = ['All', ...CATEGORIES];
+  const studyQuestions = state.allQuestions.filter(q => !q.id.startsWith('D-'));
   const filtered = state.studyFilter === 'All'
-    ? state.allQuestions
-    : state.allQuestions.filter(q => q.category === state.studyFilter);
+    ? studyQuestions
+    : studyQuestions.filter(q => q.category === state.studyFilter);
 
   const filterHtml = allCats.map(c => `
     <button class="filter-pill ${state.studyFilter === c ? 'active' : ''}" data-cat="${c}">${c}</button>
@@ -1093,6 +1155,8 @@ function renderStudy() {
 
   const listHtml = filtered.map((q, i) => {
     const correctText = q.options.find(o => o.correct).text;
+    const expandedText = expandAcronym(correctText);
+    const isRevealed = !!state.studyRevealedAnswers[q.id];
     return `
       <div class="study-item">
         <div class="study-item-header">
@@ -1102,10 +1166,13 @@ function renderStudy() {
             <div class="study-q-text">${q.question}</div>
           </div>
         </div>
-        <div class="study-options">
+        <button class="show-answer-btn ${isRevealed ? 'revealed' : ''}" data-qid="${q.id}">
+          ${isRevealed ? 'Hide Answer ▲' : 'Show Answer ▼'}
+        </button>
+        <div class="study-options" style="${isRevealed ? '' : 'display:none;'}">
           <div class="study-option is-correct">
             <span class="study-option-letter">✓</span>
-            <span>${correctText}</span>
+            <span>${expandedText}</span>
           </div>
         </div>
       </div>`;
@@ -1120,7 +1187,7 @@ function renderStudy() {
       </div>
     </div>
     <div class="study-filter-bar">${filterHtml}</div>
-    <div class="study-count">Showing ${filtered.length} of ${state.allQuestions.length} questions</div>
+    <div class="study-count">Showing ${filtered.length} of ${studyQuestions.length} questions</div>
     <div class="study-list">${listHtml}</div>`;
 }
 
@@ -1155,6 +1222,22 @@ function attachListeners() {
       pill.addEventListener('click', () => {
         state.studyFilter = pill.dataset.cat;
         render();
+      });
+    });
+    document.querySelectorAll('.show-answer-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const qid = btn.dataset.qid;
+        state.studyRevealedAnswers[qid] = !state.studyRevealedAnswers[qid];
+        const optionsEl = btn.nextElementSibling;
+        if (state.studyRevealedAnswers[qid]) {
+          optionsEl.style.display = '';
+          btn.textContent = 'Hide Answer ▲';
+          btn.classList.add('revealed');
+        } else {
+          optionsEl.style.display = 'none';
+          btn.textContent = 'Show Answer ▼';
+          btn.classList.remove('revealed');
+        }
       });
     });
   }
