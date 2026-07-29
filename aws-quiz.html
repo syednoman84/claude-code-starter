@@ -950,7 +950,7 @@ function buildQuestionBank() {
   ];
   typeK.forEach((q, i) => questions.push({ id:`K-${i}`, ...q }));
 
-  return shuffle(questions);
+  return questions;
 }
 
 // ============================================================
@@ -1278,8 +1278,8 @@ function startQuiz() {
     state.allQuestions = buildQuestionBank();
   }
   const count = state.selectedCount === 'All' ? state.allQuestions.length : state.selectedCount;
-  // rebuild shuffled questions each time
-  const fresh = buildQuestionBank();
+  // rebuild and shuffle questions each time for quiz mode
+  const fresh = shuffle(buildQuestionBank());
   state.questions = fresh.slice(0, Math.min(count, fresh.length));
   state.current = 0;
   state.answers = [];
