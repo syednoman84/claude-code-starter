@@ -1456,7 +1456,7 @@ function openAiConfig() {
     provider,
     apiKey: c.apiKey || '',
     model: c.model || aiProviderDefaults(provider).model,
-    baseUrl: c.baseUrl || 'https://llm.test.linearft.com',
+    baseUrl: c.baseUrl || '',
   };
   state.aiError = null;
   state.phase = 'aiConfig';
