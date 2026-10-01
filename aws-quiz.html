@@ -968,6 +968,7 @@ let state = {
   answers: [],       // { question, chosen, correct, wasCorrect }
   answered: false,
   studyFilter: 'All',
+  studyShowCategory: true,
 };
 
 // ============================================================
@@ -1162,7 +1163,7 @@ function renderStudy() {
         <div class="study-item-header">
           <span class="study-q-num">${i + 1}</span>
           <div>
-            <span class="category-tag" style="margin-bottom:6px;display:inline-block;">${q.category}</span>
+            ${state.studyShowCategory ? `<span class="category-tag" style="margin-bottom:6px;display:inline-block;">${q.category}</span>` : ''}
             <div class="study-q-text">${q.question}</div>
           </div>
         </div>
@@ -1182,6 +1183,9 @@ function renderStudy() {
     <div class="study-header">
       <h2>📖 Study Mode</h2>
       <div class="study-header-actions">
+        <button class="ghost-btn" id="toggleCategoryBtn" style="${state.studyShowCategory ? 'border-color:#FF9900;color:#FF9900;' : ''}">
+          ${state.studyShowCategory ? '🏷 Hide Category' : '🏷 Show Category'}
+        </button>
         <button class="ghost-btn" id="backToSetupBtn">← Back to Home</button>
         <button class="start-btn" id="goQuizBtn" style="padding:10px 24px;font-size:0.9rem;">Start Quiz →</button>
       </div>
@@ -1213,6 +1217,10 @@ function attachListeners() {
   }
 
   if (state.phase === 'study') {
+    document.getElementById('toggleCategoryBtn').addEventListener('click', () => {
+      state.studyShowCategory = !state.studyShowCategory;
+      render();
+    });
     document.getElementById('backToSetupBtn').addEventListener('click', () => {
       state.phase = 'setup';
       render();
