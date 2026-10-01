@@ -439,6 +439,70 @@
     .study-options { margin-left: 0; }
     .show-answer-btn { margin-left: 0; }
   }
+
+  /* ---- AUDIO MODE ---- */
+  .audio-options { display: flex; flex-direction: column; gap: 10px; }
+  .audio-option {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: #243347;
+    border: 2px solid #2e4060;
+    border-radius: 10px;
+    padding: 14px 18px;
+    color: #c8d6e5;
+    font-size: 0.95rem;
+    line-height: 1.4;
+    transition: background 0.3s, border-color 0.3s;
+  }
+  .audio-option.correct { background: #0d3d2a; border-color: #2ecc71; color: #fff; }
+  .audio-option.correct .option-letter { background: #2ecc71; color: #0f1923; }
+  .audio-option.wrong { background: #3d1515; border-color: #e74c3c; color: #fff; }
+  .audio-option.wrong .option-letter { background: #e74c3c; color: #fff; }
+
+  .audio-status-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    margin-top: 20px;
+    min-height: 56px;
+  }
+  .audio-status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1rem;
+    font-weight: 600;
+    padding: 12px 28px;
+    border-radius: 12px;
+    background: #1a2535;
+    color: #8a9bb0;
+  }
+  .audio-status.listening { color: #FF9900; background: #241a00; border: 2px solid #FF9900; }
+  .audio-status.correct-status { color: #2ecc71; background: #0d3d2a; }
+  .audio-status.wrong-status { color: #e74c3c; background: #3d1515; }
+
+  .mic-pulse { display: inline-block; animation: micpulse 1s ease-in-out infinite; }
+  @keyframes micpulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.35); opacity: 0.65; }
+  }
+
+  .audio-fallback-btns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .audio-letter-btn {
+    background: #243347;
+    border: 2px solid #2e4060;
+    color: #c8d6e5;
+    width: 56px;
+    height: 56px;
+    border-radius: 10px;
+    font-size: 1.2rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .audio-letter-btn:hover { border-color: #c084fc; color: #c084fc; }
 </style>
 </head>
 <body>
@@ -970,7 +1034,145 @@ let state = {
   answered: false,
   studyFilter: 'All',
   studyShowCategory: true,
+  audioFeedback: null,   // { chosenIndex, correctIndex, wasCorrect }
+  audioListening: false,
 };
+
+// ============================================================
+// AUDIO MODE — Speech Synthesis + Recognition
+// ============================================================
+let recognition = null;
+
+function speakSequence(texts, onDone) {
+  window.speechSynthesis.cancel();
+  let i = 0;
+  function next() {
+    if (i >= texts.length) { if (onDone) onDone(); return; }
+    const utt = new SpeechSynthesisUtterance(texts[i++]);
+    utt.rate = 0.9;
+    utt.onend = next;
+    utt.onerror = next;
+    window.speechSynthesis.speak(utt);
+  }
+  next();
+}
+
+function startAudioMode() {
+  const count = state.selectedCount === 'All' ? buildQuestionBank().length : state.selectedCount;
+  const fresh = shuffle(buildQuestionBank());
+  state.questions = fresh.slice(0, Math.min(count, fresh.length));
+  state.current = 0;
+  state.answers = [];
+  state.answered = false;
+  state.audioFeedback = null;
+  state.audioListening = false;
+  state.phase = 'audio';
+  render();
+  setTimeout(startAudioQuestion, 300);
+}
+
+function startAudioQuestion() {
+  const q = state.questions[state.current];
+  const letters = ['A', 'B', 'C', 'D'];
+  state.audioFeedback = null;
+  state.audioListening = false;
+  render();
+  const texts = [q.question, ...q.options.map((opt, i) => `${letters[i]}. ${opt.text}`)];
+  speakSequence(texts, () => {
+    state.audioListening = true;
+    render();
+    startListening();
+  });
+}
+
+function startListening() {
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRec) return; // fallback letter buttons are always visible when listening
+
+  recognition = new SpeechRec();
+  recognition.lang = 'en-US';
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 5;
+
+  recognition.onresult = (event) => {
+    const transcripts = Array.from(event.results[0]).map(r => r.transcript.trim().toUpperCase());
+    let letter = null;
+    for (const t of transcripts) {
+      const w = t.replace(/[^A-Z]/g, '');
+      if (['A','AY','EY'].includes(w))              { letter = 'A'; break; }
+      if (['B','BE','BEE'].includes(w))              { letter = 'B'; break; }
+      if (['C','SEE','SEA','SI','CE'].includes(w))   { letter = 'C'; break; }
+      if (['D','DEE','DE'].includes(w))              { letter = 'D'; break; }
+      const m = t.match(/\b([ABCD])\b/);
+      if (m) { letter = m[1]; break; }
+    }
+    if (letter) {
+      handleAudioAnswer(letter);
+    } else {
+      recognition = null;
+      if (state.phase === 'audio' && state.audioListening) setTimeout(startListening, 400);
+    }
+  };
+
+  recognition.onerror = (e) => {
+    recognition = null;
+    if (state.phase === 'audio' && state.audioListening && e.error !== 'aborted') {
+      setTimeout(startListening, 600);
+    }
+  };
+
+  recognition.onend = () => {
+    if (state.phase === 'audio' && state.audioListening && !state.audioFeedback) {
+      recognition = null;
+      setTimeout(startListening, 200);
+    }
+  };
+
+  recognition.start();
+}
+
+function handleAudioAnswer(letter) {
+  if (recognition) { try { recognition.abort(); } catch(e) {} recognition = null; }
+  state.audioListening = false;
+
+  const q = state.questions[state.current];
+  const letters = ['A', 'B', 'C', 'D'];
+  const correctIndex = q.options.findIndex(o => o.correct);
+  const chosenIndex = letters.indexOf(letter);
+  const wasCorrect = chosenIndex === correctIndex;
+
+  state.audioFeedback = { chosenIndex, correctIndex, wasCorrect };
+  state.answered = true;
+  state.chosenIndex = chosenIndex >= 0 ? chosenIndex : null;
+  state.answers.push({
+    question: q.question,
+    category: q.category,
+    options: q.options,
+    chosen: chosenIndex >= 0 ? q.options[chosenIndex] : null,
+    wasCorrect,
+  });
+
+  render();
+
+  const feedbackText = wasCorrect
+    ? 'Correct!'
+    : `Wrong. The correct answer was ${letters[correctIndex]}.`;
+  speakSequence([feedbackText], null);
+}
+
+function nextAudioQuestion() {
+  window.speechSynthesis.cancel();
+  if (recognition) { try { recognition.abort(); } catch(e) {} recognition = null; }
+  if (state.current + 1 >= state.questions.length) {
+    state.phase = 'summary';
+    render();
+    return;
+  }
+  state.current++;
+  state.answered = false;
+  state.chosenIndex = null;
+  startAudioQuestion();
+}
 
 // ============================================================
 // RENDER
@@ -980,6 +1182,7 @@ function render() {
   if (state.phase === 'setup') app.innerHTML = renderSetup();
   else if (state.phase === 'quiz') app.innerHTML = renderQuiz();
   else if (state.phase === 'study') app.innerHTML = renderStudy();
+  else if (state.phase === 'audio') app.innerHTML = renderAudio();
   else app.innerHTML = renderSummary();
   attachListeners();
 }
@@ -1001,6 +1204,7 @@ function renderSetup() {
       <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
         <button class="start-btn" id="startBtn">Start Quiz →</button>
         <button class="start-btn" id="studyBtn" style="background:#243347;color:#FF9900;border:2px solid #FF9900;">📖 Study Mode</button>
+        <button class="start-btn" id="audioBtn" style="background:#243347;color:#c084fc;border:2px solid #c084fc;">🎧 Audio Mode</button>
       </div>
       <div class="stats-row">
         <div class="stat"><div class="num">108</div><div class="lbl">Services</div></div>
@@ -1196,6 +1400,62 @@ function renderStudy() {
     <div class="study-list">${listHtml}</div>`;
 }
 
+function renderAudio() {
+  const q = state.questions[state.current];
+  const total = state.questions.length;
+  const pct = Math.round((state.current / total) * 100);
+  const letters = ['A', 'B', 'C', 'D'];
+  const score = state.answers.filter(a => a.wasCorrect).length;
+  const fb = state.audioFeedback;
+
+  const optionsHtml = q.options.map((opt, i) => {
+    let cls = '';
+    if (fb) {
+      if (opt.correct) cls = 'correct';
+      else if (i === fb.chosenIndex) cls = 'wrong';
+    }
+    return `
+      <div class="audio-option ${cls}">
+        <span class="option-letter">${letters[i]}</span>
+        <span>${opt.text}</span>
+      </div>`;
+  }).join('');
+
+  let statusHtml = '';
+  if (!fb) {
+    if (state.audioListening) {
+      statusHtml = `
+        <div class="audio-status listening"><span class="mic-pulse">🎤</span> Listening… say A, B, C or D</div>
+        <div class="audio-fallback-btns">
+          ${letters.map(l => `<button class="audio-letter-btn" data-letter="${l}">${l}</button>`).join('')}
+        </div>`;
+    } else {
+      statusHtml = `<div class="audio-status"><span>🔊</span> Reading question…</div>`;
+    }
+  } else {
+    statusHtml = fb.wasCorrect
+      ? `<div class="audio-status correct-status">✅ Correct!</div>`
+      : `<div class="audio-status wrong-status">❌ ${fb.chosenIndex >= 0 ? 'You said ' + letters[fb.chosenIndex] + ' — ' : ''}Answer: ${letters[fb.correctIndex]}</div>`;
+    statusHtml += `<button class="next-btn" id="audioNextBtn" style="margin-top:4px;">${state.current + 1 === total ? 'See Results' : 'Next →'}</button>`;
+  }
+
+  return `
+    <div class="quiz-header">
+      <span class="q-counter">Question ${state.current + 1} of ${total}</span>
+      <span class="q-score">Score: ${score} / ${state.current}</span>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+    <div class="quiz-card">
+      <span class="category-tag">${q.category}</span>
+      <div class="question-text">${q.question}</div>
+      <div class="audio-options">${optionsHtml}</div>
+    </div>
+    <div class="audio-status-wrap">${statusHtml}</div>
+    <div style="display:flex;justify-content:flex-end;margin-top:8px;">
+      <button class="ghost-btn" id="audioQuitBtn">✕ Quit</button>
+    </div>`;
+}
+
 // ============================================================
 // EVENT LISTENERS
 // ============================================================
@@ -1215,6 +1475,7 @@ function attachListeners() {
       state.studyFilter = 'All';
       render();
     });
+    document.getElementById('audioBtn').addEventListener('click', startAudioMode);
   }
 
   if (state.phase === 'study') {
@@ -1261,6 +1522,22 @@ function attachListeners() {
     if (nextBtn && state.answered) {
       nextBtn.addEventListener('click', nextQuestion);
     }
+  }
+
+  if (state.phase === 'audio') {
+    document.querySelectorAll('.audio-letter-btn').forEach(btn => {
+      btn.addEventListener('click', () => handleAudioAnswer(btn.dataset.letter));
+    });
+    const audioNextBtn = document.getElementById('audioNextBtn');
+    if (audioNextBtn) audioNextBtn.addEventListener('click', nextAudioQuestion);
+    document.getElementById('audioQuitBtn').addEventListener('click', () => {
+      window.speechSynthesis.cancel();
+      if (recognition) { try { recognition.abort(); } catch(e) {} recognition = null; }
+      state.audioListening = false;
+      state.audioFeedback = null;
+      state.phase = 'setup';
+      render();
+    });
   }
 
   if (state.phase === 'summary') {
