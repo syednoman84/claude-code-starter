@@ -958,6 +958,7 @@ function buildQuestionBank() {
 // ============================================================
 const COUNTS = [10, 20, 30, 50, 'All'];
 const BANK_SIZE = buildQuestionBank().length;
+const STUDY_SIZE = buildQuestionBank().filter(q => !q.id.startsWith('D-')).length;
 
 let state = {
   phase: 'setup',    // 'setup' | 'quiz' | 'summary' | 'study'
@@ -1004,7 +1005,7 @@ function renderSetup() {
       <div class="stats-row">
         <div class="stat"><div class="num">108</div><div class="lbl">Services</div></div>
         <div class="stat"><div class="num">15</div><div class="lbl">Categories</div></div>
-        <div class="stat"><div class="num">${BANK_SIZE}</div><div class="lbl">Questions</div></div>
+        <div class="stat"><div class="num">${STUDY_SIZE}</div><div class="lbl">Questions</div></div>
       </div>
     </div>`;
 }
