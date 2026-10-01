@@ -503,6 +503,61 @@
     transition: all 0.15s;
   }
   .audio-letter-btn:hover { border-color: #c084fc; color: #c084fc; }
+
+  /* ---- AI MODE ---- */
+  .ai-field { margin-bottom: 18px; }
+  .ai-field label { color: #38bdf8; }
+  .ai-input {
+    width: 100%;
+    background: #243347;
+    border: 2px solid #2e4060;
+    border-radius: 10px;
+    padding: 12px 14px;
+    color: #e8eaed;
+    font-size: 0.95rem;
+    font-family: inherit;
+  }
+  .ai-input:focus { outline: none; border-color: #38bdf8; }
+  select.ai-input { cursor: pointer; }
+  .ai-note {
+    font-size: 0.78rem;
+    color: #8a9bb0;
+    line-height: 1.5;
+    background: #141e2b;
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 20px;
+  }
+  .ai-config-error {
+    background: #3d1515;
+    color: #ff9b9b;
+    border: 1px solid #e74c3c;
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 0.85rem;
+    margin-bottom: 16px;
+    line-height: 1.5;
+  }
+  .ai-explanation {
+    margin-top: 20px;
+    background: #15263a;
+    border-left: 4px solid #38bdf8;
+    border-radius: 8px;
+    padding: 14px 16px;
+    font-size: 0.9rem;
+    color: #c8d6e5;
+    line-height: 1.6;
+  }
+  .ai-explanation strong { color: #38bdf8; }
+  .ai-spinner {
+    width: 44px; height: 44px;
+    border: 4px solid #2e4060;
+    border-top-color: #38bdf8;
+    border-radius: 50%;
+    margin: 10px auto 0;
+    animation: aispin 0.8s linear infinite;
+  }
+  @keyframes aispin { to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
@@ -1024,8 +1079,29 @@ const COUNTS = [10, 20, 30, 50, 'All'];
 const BANK_SIZE = buildQuestionBank().length;
 const STUDY_SIZE = buildQuestionBank().filter(q => !q.id.startsWith('D-')).length;
 
+// ---- AI MODE config (persisted in localStorage so it is defined only once) ----
+const AI_CONFIG_KEY = 'awsQuizAiConfig';
+
+function loadAiConfig() {
+  try {
+    const raw = localStorage.getItem(AI_CONFIG_KEY);
+    if (!raw) return null;
+    const cfg = JSON.parse(raw);
+    if (cfg && cfg.provider && cfg.model && cfg.apiKey) return cfg;
+  } catch (e) {}
+  return null;
+}
+
+function saveAiConfig(cfg) {
+  try { localStorage.setItem(AI_CONFIG_KEY, JSON.stringify(cfg)); } catch (e) {}
+}
+
+function clearAiConfig() {
+  try { localStorage.removeItem(AI_CONFIG_KEY); } catch (e) {}
+}
+
 let state = {
-  phase: 'setup',    // 'setup' | 'quiz' | 'summary' | 'study'
+  phase: 'setup',    // 'setup' | 'quiz' | 'summary' | 'study' | 'audio' | 'aiConfig' | 'ai'
   selectedCount: 20,
   allQuestions: [],
   questions: [],     // active question set for this session
@@ -1036,6 +1112,16 @@ let state = {
   studyShowCategory: true,
   audioFeedback: null,   // { chosenIndex, correctIndex, wasCorrect }
   audioListening: false,
+  // ---- AI mode ----
+  aiConfig: loadAiConfig(),   // { provider, model, apiKey, baseUrl } | null
+  aiForm: null,               // scratch form state while editing connection
+  aiQuestion: null,           // { question, category, explanation, options:[{text,correct}] }
+  aiLoading: false,
+  aiError: null,
+  aiAnswered: false,
+  aiChosenIndex: null,
+  aiScore: { correct: 0, total: 0 },
+  aiRecent: [],               // recent question stems, to steer the model away from repeats
 };
 
 // ============================================================
@@ -1183,6 +1269,327 @@ function nextAudioQuestion() {
 }
 
 // ============================================================
+// AI MODE — runtime question generation via an external LLM
+// ============================================================
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => (
+    { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]
+  ));
+}
+const escapeAttr = escapeHtml;
+
+function aiProviderDefaults(provider) {
+  switch (provider) {
+    case 'anthropic': return { model: 'claude-opus-5-5',  keyLabel: 'Anthropic API Key',          needsBaseUrl: false };
+    case 'gemini':    return { model: 'gemini-2.0-flash', keyLabel: 'Google AI (Gemini) API Key', needsBaseUrl: false };
+    case 'openai':    return { model: 'bedrock-claude-opus-4-6', keyLabel: 'API Key',                needsBaseUrl: true  };
+    default:          return { model: '',                 keyLabel: 'API Key',                     needsBaseUrl: false };
+  }
+}
+
+function buildAiPrompt() {
+  const focusCat = CATEGORIES[Math.floor(Math.random() * CATEGORIES.length)];
+  const focusSvc = SERVICES[Math.floor(Math.random() * SERVICES.length)];
+  const avoid = state.aiRecent.slice(-12);
+  const system = 'You are an expert AWS instructor who writes high-quality practice questions for the AWS Certified Solutions Architect – Associate (SAA-C03) exam. You write realistic, exam-style scenario questions, each with exactly one unambiguous correct answer and three plausible but incorrect distractors.';
+  const user = [
+    'Generate ONE new multiple-choice practice question for the AWS Certified Solutions Architect – Associate (SAA-C03) exam.',
+    '',
+    'Requirements:',
+    '- Exactly 4 answer options, with exactly one correct.',
+    '- Prefer a realistic, scenario-based question of the style actually seen on the SAA-C03 exam.',
+    `- For variety, lean toward the "${focusCat}" area (for example a service like ${focusSvc.name}) unless a stronger question comes to mind.`,
+    '- Distractors must be plausible AWS services/options, not obviously wrong.',
+    '- Keep the question self-contained and concise.',
+    avoid.length ? ('- Do NOT repeat or closely resemble any of these recently asked questions:\n' + avoid.map(q => '  • ' + q).join('\n')) : '',
+    '',
+    'Respond with ONLY a JSON object (no markdown fences, no commentary) in exactly this shape:',
+    '{',
+    '  "question": "the question text",',
+    '  "category": "a short AWS category label",',
+    '  "options": ["option A", "option B", "option C", "option D"],',
+    '  "correctIndex": 0,',
+    '  "explanation": "a 1-3 sentence explanation of why the correct answer is right"',
+    '}',
+  ].filter(Boolean).join('\n');
+  return { system, user };
+}
+
+function parseAiJson(text) {
+  if (!text) throw new Error('The model returned an empty response.');
+  let t = String(text).trim();
+  t = t.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+  const first = t.indexOf('{');
+  const last = t.lastIndexOf('}');
+  if (first !== -1 && last !== -1 && last > first) t = t.slice(first, last + 1);
+
+  let obj;
+  try { obj = JSON.parse(t); }
+  catch (e) { throw new Error('Could not parse the model response as JSON.'); }
+
+  if (!obj || typeof obj.question !== 'string' || !Array.isArray(obj.options) || obj.options.length !== 4) {
+    throw new Error('The model did not return a valid question (it must have exactly 4 options).');
+  }
+  let ci = Number(obj.correctIndex);
+  if (!Number.isInteger(ci) || ci < 0 || ci > 3) ci = 0;
+  return {
+    question: obj.question,
+    category: (typeof obj.category === 'string' && obj.category.trim()) ? obj.category.trim() : 'AWS SAA-C03',
+    options: obj.options.map(o => String(o)),
+    correctIndex: ci,
+    explanation: typeof obj.explanation === 'string' ? obj.explanation : '',
+  };
+}
+
+async function describeHttpError(res) {
+  let detail = '';
+  try { detail = await res.text(); } catch (e) {}
+  try {
+    const j = JSON.parse(detail);
+    detail = (j.error && (j.error.message || j.error)) || j.message || detail;
+    if (typeof detail !== 'string') detail = JSON.stringify(detail);
+  } catch (e) {}
+  return ('Request failed (HTTP ' + res.status + '). ' + (detail ? detail.slice(0, 300) : '')).trim();
+}
+
+async function callAiProvider(cfg, system, user) {
+  if (cfg.provider === 'anthropic') {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': cfg.apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: cfg.model,
+        max_tokens: 1024,
+        system,
+        messages: [{ role: 'user', content: user }],
+      }),
+    });
+    if (!res.ok) throw new Error(await describeHttpError(res));
+    const data = await res.json();
+    const block = (data.content || []).find(b => b.type === 'text');
+    return block ? block.text : '';
+  }
+
+  if (cfg.provider === 'gemini') {
+    const url = 'https://generativelanguage.googleapis.com/v1beta/models/'
+      + encodeURIComponent(cfg.model) + ':generateContent?key=' + encodeURIComponent(cfg.apiKey);
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: system }] },
+        contents: [{ role: 'user', parts: [{ text: user }] }],
+        generationConfig: { responseMimeType: 'application/json', temperature: 1 },
+      }),
+    });
+    if (!res.ok) throw new Error(await describeHttpError(res));
+    const data = await res.json();
+    const cand = data.candidates && data.candidates[0];
+    const parts = cand && cand.content && cand.content.parts;
+    return (parts && parts[0] && parts[0].text) ? parts[0].text : '';
+  }
+
+  // openai-compatible (OpenAI, local servers, and most "other" models)
+  const base = (cfg.baseUrl || 'https://api.openai.com/v1').replace(/\/+$/, '');
+  const res = await fetch(base + '/chat/completions', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'authorization': 'Bearer ' + cfg.apiKey,
+    },
+    body: JSON.stringify({
+      model: cfg.model,
+      temperature: 1,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ],
+    }),
+  });
+  if (!res.ok) throw new Error(await describeHttpError(res));
+  const data = await res.json();
+  const choice = data.choices && data.choices[0];
+  return (choice && choice.message && choice.message.content) ? choice.message.content : '';
+}
+
+async function generateAiQuestion() {
+  state.aiLoading = true;
+  state.aiError = null;
+  state.aiAnswered = false;
+  state.aiChosenIndex = null;
+  state.aiQuestion = null;
+  render();
+  try {
+    const { system, user } = buildAiPrompt();
+    const text = await callAiProvider(state.aiConfig, system, user);
+    const q = parseAiJson(text);
+    // shuffle so the correct answer is not always in the same position
+    const options = shuffle(q.options.map((t, i) => ({ text: t, correct: i === q.correctIndex })));
+    state.aiQuestion = { question: q.question, category: q.category, explanation: q.explanation, options };
+    state.aiRecent.push(q.question);
+    if (state.aiRecent.length > 20) state.aiRecent = state.aiRecent.slice(-20);
+  } catch (err) {
+    state.aiError = (err && err.message) ? err.message : String(err);
+  }
+  state.aiLoading = false;
+  render();
+}
+
+function startAiMode() {
+  state.aiConfig = loadAiConfig();
+  if (!state.aiConfig) {
+    openAiConfig();
+    return;
+  }
+  enterAiQuiz();
+}
+
+function openAiConfig() {
+  const c = state.aiConfig || {};
+  const provider = c.provider || 'openai';
+  state.aiForm = {
+    provider,
+    apiKey: c.apiKey || '',
+    model: c.model || aiProviderDefaults(provider).model,
+    baseUrl: c.baseUrl || 'https://llm.test.linearft.com',
+  };
+  state.aiError = null;
+  state.phase = 'aiConfig';
+  render();
+}
+
+function enterAiQuiz() {
+  state.phase = 'ai';
+  state.aiScore = { correct: 0, total: 0 };
+  state.aiRecent = [];
+  generateAiQuestion();
+}
+
+function selectAiAnswer(idx) {
+  if (state.aiAnswered || !state.aiQuestion) return;
+  state.aiChosenIndex = idx;
+  state.aiAnswered = true;
+  state.aiScore.total += 1;
+  if (state.aiQuestion.options[idx] && state.aiQuestion.options[idx].correct) state.aiScore.correct += 1;
+  render();
+}
+
+function renderAiConfig() {
+  const f = state.aiForm;
+  const d = aiProviderDefaults(f.provider);
+  return `
+    <div class="setup-card" style="text-align:left;">
+      <div style="text-align:center;">
+        <div class="logo">🤖</div>
+        <h1>AI Question Mode</h1>
+        <p class="subtitle">Connect an AI model to generate fresh SAA-C03 questions on the fly</p>
+      </div>
+      <div class="ai-field">
+        <label>Provider</label>
+        <select id="aiProvider" class="ai-input">
+          <option value="anthropic" ${f.provider === 'anthropic' ? 'selected' : ''}>Anthropic — Claude (Opus / Sonnet)</option>
+          <option value="gemini" ${f.provider === 'gemini' ? 'selected' : ''}>Google — Gemini</option>
+          <option value="openai" ${f.provider === 'openai' ? 'selected' : ''}>OpenAI-compatible (OpenAI / local / other)</option>
+        </select>
+      </div>
+      <div class="ai-field">
+        <label>Model</label>
+        <input id="aiModel" class="ai-input" type="text" value="${escapeAttr(f.model)}" placeholder="${escapeAttr(d.model)}" autocomplete="off">
+      </div>
+      <div class="ai-field">
+        <label>${escapeHtml(d.keyLabel)}</label>
+        <input id="aiKey" class="ai-input" type="password" value="${escapeAttr(f.apiKey)}" placeholder="Paste your API key" autocomplete="off">
+      </div>
+      ${f.provider === 'openai' ? `
+      <div class="ai-field">
+        <label>Base URL</label>
+        <input id="aiBaseUrl" class="ai-input" type="text" value="${escapeAttr(f.baseUrl)}" placeholder="https://api.openai.com/v1" autocomplete="off">
+      </div>` : ''}
+      ${state.aiError ? `<div class="ai-config-error">⚠ ${escapeHtml(state.aiError)}</div>` : ''}
+      <p class="ai-note">🔒 Your key is stored only in this browser (localStorage) and sent directly to the provider you choose — never anywhere else. Only paste a key you are comfortable keeping on this device.</p>
+      <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+        <button class="start-btn" id="aiSaveBtn" style="background:#38bdf8;">Save &amp; Start →</button>
+        <button class="ghost-btn" id="aiConfigBackBtn">← Back</button>
+      </div>
+    </div>`;
+}
+
+function renderAi() {
+  const score = state.aiScore;
+  const modelLabel = state.aiConfig ? state.aiConfig.model : '';
+  const header = `
+    <div class="quiz-header">
+      <span class="q-counter">🤖 AI Mode — ${escapeHtml(modelLabel)}</span>
+      <span class="q-score">Score: ${score.correct} / ${score.total}</span>
+    </div>`;
+  const controls = `
+    <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:12px;">
+      <button class="ghost-btn" id="aiSettingsBtn">⚙ Connection</button>
+      <button class="ghost-btn" id="aiQuitBtn">✕ Quit</button>
+    </div>`;
+
+  if (state.aiLoading) {
+    return `
+      ${header}
+      <div class="quiz-card" style="text-align:center;">
+        <div class="ai-spinner"></div>
+        <div style="color:#8a9bb0;margin-top:16px;">Generating a question…</div>
+      </div>
+      ${controls}`;
+  }
+
+  if (state.aiError) {
+    return `
+      ${header}
+      <div class="quiz-card">
+        <div class="ai-config-error" style="margin-bottom:0;">⚠ ${escapeHtml(state.aiError)}</div>
+        <div style="margin-top:14px;color:#8a9bb0;font-size:0.82rem;">Check your model name, API key, and network, then retry — or edit the connection below.</div>
+        <div style="display:flex;gap:12px;margin-top:20px;flex-wrap:wrap;">
+          <button class="next-btn" id="aiRetryBtn">↻ Try Again</button>
+        </div>
+      </div>
+      ${controls}`;
+  }
+
+  const q = state.aiQuestion;
+  if (!q) return header + '<div class="quiz-card">No question loaded.</div>' + controls;
+
+  const letters = ['A', 'B', 'C', 'D'];
+  const optionsHtml = q.options.map((opt, i) => {
+    let cls = 'option-btn';
+    if (state.aiAnswered) {
+      if (opt.correct) cls += ' correct';
+      else if (i === state.aiChosenIndex) cls += ' wrong';
+    }
+    return `
+      <button class="${cls}" data-idx="${i}" ${state.aiAnswered ? 'disabled' : ''}>
+        <span class="option-letter">${letters[i]}</span>
+        <span>${escapeHtml(opt.text)}</span>
+      </button>`;
+  }).join('');
+
+  const explanationHtml = (state.aiAnswered && q.explanation)
+    ? `<div class="ai-explanation"><strong>Explanation:</strong> ${escapeHtml(q.explanation)}</div>` : '';
+
+  return `
+    ${header}
+    <div class="quiz-card">
+      <div class="question-text">${escapeHtml(q.question)}</div>
+      <div class="options">${optionsHtml}</div>
+      ${explanationHtml}
+    </div>
+    <div class="quiz-footer">
+      <button class="next-btn" id="aiNextBtn" ${state.aiAnswered ? '' : 'disabled'}>Next Question →</button>
+    </div>
+    ${controls}`;
+}
+
+// ============================================================
 // RENDER
 // ============================================================
 function render() {
@@ -1191,6 +1598,8 @@ function render() {
   else if (state.phase === 'quiz') app.innerHTML = renderQuiz();
   else if (state.phase === 'study') app.innerHTML = renderStudy();
   else if (state.phase === 'audio') app.innerHTML = renderAudio();
+  else if (state.phase === 'aiConfig') app.innerHTML = renderAiConfig();
+  else if (state.phase === 'ai') app.innerHTML = renderAi();
   else app.innerHTML = renderSummary();
   attachListeners();
 }
@@ -1213,6 +1622,7 @@ function renderSetup() {
         <button class="start-btn" id="startBtn">Start Quiz →</button>
         <button class="start-btn" id="studyBtn" style="background:#243347;color:#FF9900;border:2px solid #FF9900;">📖 Study Mode</button>
         <button class="start-btn" id="audioBtn" style="background:#243347;color:#c084fc;border:2px solid #c084fc;">🎧 Audio Mode</button>
+        <button class="start-btn" id="aiBtn" style="background:#243347;color:#38bdf8;border:2px solid #38bdf8;">🤖 AI Mode</button>
       </div>
       <div class="stats-row">
         <div class="stat"><div class="num">108</div><div class="lbl">Services</div></div>
@@ -1484,6 +1894,67 @@ function attachListeners() {
       render();
     });
     document.getElementById('audioBtn').addEventListener('click', startAudioMode);
+    document.getElementById('aiBtn').addEventListener('click', startAiMode);
+  }
+
+  if (state.phase === 'aiConfig') {
+    const providerSel = document.getElementById('aiProvider');
+    const modelInput = document.getElementById('aiModel');
+    const keyInput = document.getElementById('aiKey');
+    const baseInput = document.getElementById('aiBaseUrl');
+    const syncForm = () => {
+      state.aiForm.model = modelInput.value;
+      state.aiForm.apiKey = keyInput.value;
+      if (baseInput) state.aiForm.baseUrl = baseInput.value;
+    };
+    providerSel.addEventListener('change', () => {
+      syncForm();
+      state.aiForm.provider = providerSel.value;
+      state.aiForm.model = aiProviderDefaults(providerSel.value).model;
+      state.aiError = null;
+      render();
+    });
+    document.getElementById('aiSaveBtn').addEventListener('click', () => {
+      syncForm();
+      const f = state.aiForm;
+      if (!f.model.trim()) { state.aiError = 'Please enter a model name.'; render(); return; }
+      if (!f.apiKey.trim()) { state.aiError = 'Please enter an API key.'; render(); return; }
+      const cfg = {
+        provider: f.provider,
+        model: f.model.trim(),
+        apiKey: f.apiKey.trim(),
+        baseUrl: (f.baseUrl || '').trim(),
+      };
+      state.aiConfig = cfg;
+      saveAiConfig(cfg);
+      state.aiError = null;
+      enterAiQuiz();
+    });
+    document.getElementById('aiConfigBackBtn').addEventListener('click', () => {
+      state.aiError = null;
+      state.phase = 'setup';
+      render();
+    });
+  }
+
+  if (state.phase === 'ai') {
+    if (!state.aiLoading && !state.aiError && state.aiQuestion && !state.aiAnswered) {
+      document.querySelectorAll('.option-btn').forEach(btn => {
+        btn.addEventListener('click', () => selectAiAnswer(parseInt(btn.dataset.idx, 10)));
+      });
+    }
+    const aiNextBtn = document.getElementById('aiNextBtn');
+    if (aiNextBtn && state.aiAnswered) aiNextBtn.addEventListener('click', generateAiQuestion);
+    const aiRetryBtn = document.getElementById('aiRetryBtn');
+    if (aiRetryBtn) aiRetryBtn.addEventListener('click', generateAiQuestion);
+    const aiSettingsBtn = document.getElementById('aiSettingsBtn');
+    if (aiSettingsBtn) aiSettingsBtn.addEventListener('click', openAiConfig);
+    const aiQuitBtn = document.getElementById('aiQuitBtn');
+    if (aiQuitBtn) aiQuitBtn.addEventListener('click', () => {
+      state.phase = 'setup';
+      state.aiError = null;
+      render();
+    });
   }
 
   if (state.phase === 'study') {
