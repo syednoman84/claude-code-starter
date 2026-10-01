@@ -1043,16 +1043,21 @@ let state = {
 // ============================================================
 let recognition = null;
 
-function speakSequence(texts, onDone) {
+function speakSequence(items, onDone) {
   window.speechSynthesis.cancel();
   let i = 0;
   function next() {
-    if (i >= texts.length) { if (onDone) onDone(); return; }
-    const utt = new SpeechSynthesisUtterance(texts[i++]);
-    utt.rate = 0.9;
-    utt.onend = next;
-    utt.onerror = next;
-    window.speechSynthesis.speak(utt);
+    if (i >= items.length) { if (onDone) onDone(); return; }
+    const item = items[i++];
+    if (typeof item === 'number') {
+      setTimeout(next, item);
+    } else {
+      const utt = new SpeechSynthesisUtterance(item);
+      utt.rate = 0.9;
+      utt.onend = next;
+      utt.onerror = next;
+      window.speechSynthesis.speak(utt);
+    }
   }
   next();
 }
@@ -1077,8 +1082,11 @@ function startAudioQuestion() {
   state.audioFeedback = null;
   state.audioListening = false;
   render();
-  const texts = [q.question, ...q.options.map((opt, i) => `${letters[i]}. ${opt.text}`)];
-  speakSequence(texts, () => {
+  const items = [
+    q.question, 600,
+    ...q.options.flatMap((opt, i) => [`${letters[i]}.`, 300, opt.text, 500]),
+  ];
+  speakSequence(items, () => {
     state.audioListening = true;
     render();
     startListening();
