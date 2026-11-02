@@ -88,6 +88,47 @@
   .start-btn:hover { background: #e68a00; transform: translateY(-1px); }
   .start-btn:active { transform: translateY(0); }
 
+  /* ---- ORDER TOGGLE (random vs fixed) ---- */
+  .order-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    background: #243347;
+    border: 2px solid #2e4060;
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-bottom: 28px;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .order-option:hover { border-color: #FF9900; }
+  .order-option input {
+    width: 20px;
+    height: 20px;
+    margin-top: 2px;
+    accent-color: #FF9900;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .order-option label { cursor: pointer; margin: 0; display: block; }
+  .order-option .order-title {
+    display: block;
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: #fff;
+    text-transform: none;
+    letter-spacing: 0;
+    margin: 0;
+  }
+  .order-option .order-desc {
+    display: block;
+    font-size: 0.78rem;
+    color: #8a9bb0;
+    margin-top: 3px;
+    line-height: 1.4;
+  }
+
   .stats-row {
     display: flex;
     justify-content: center;
@@ -706,10 +747,30 @@ const SERVICES = [
 // ============================================================
 // QUESTION GENERATION
 // ============================================================
+// Seedable RNG. When `seededRng` is set (fixed-sequence mode), all quiz
+// randomness becomes deterministic, so the questions and answer options come
+// out identically every attempt. When null, we use plain Math.random().
+let seededRng = null;
+const FIXED_SEED = 0x5a1b2c3d; // any constant — defines the one fixed sequence
+
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function rand() {
+  return seededRng ? seededRng() : Math.random();
+}
+
 function shuffle(arr) {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(rand() * (i + 1));
     [a[i], a[j]] = [a[j], a[i]];
   }
   return a;
@@ -1103,6 +1164,7 @@ function clearAiConfig() {
 let state = {
   phase: 'setup',    // 'setup' | 'quiz' | 'summary' | 'study' | 'audio' | 'aiConfig' | 'ai'
   selectedCount: 20,
+  randomize: true,   // true = shuffle each attempt; false = fixed sequence from source
   allQuestions: [],
   questions: [],     // active question set for this session
   current: 0,
@@ -1618,6 +1680,15 @@ function renderSetup() {
           </button>
         `).join('')}
       </div>
+      <label class="order-option" for="randomizeChk">
+        <input type="checkbox" id="randomizeChk" ${state.randomize ? 'checked' : ''}>
+        <span>
+          <span class="order-title">🔀 Randomize questions</span>
+          <span class="order-desc">${state.randomize
+            ? 'Questions and answer options are shuffled on every attempt.'
+            : 'Fixed sequence from the source — the same questions in the same order every time.'}</span>
+        </span>
+      </label>
       <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
         <button class="start-btn" id="startBtn">Start Quiz →</button>
         <button class="start-btn" id="studyBtn" style="background:#243347;color:#FF9900;border:2px solid #FF9900;">📖 Study Mode</button>
@@ -1886,6 +1957,13 @@ function attachListeners() {
         render();
       });
     });
+    const randomizeChk = document.getElementById('randomizeChk');
+    if (randomizeChk) {
+      randomizeChk.addEventListener('change', () => {
+        state.randomize = randomizeChk.checked;
+        render();
+      });
+    }
     document.getElementById('startBtn').addEventListener('click', startQuiz);
     document.getElementById('studyBtn').addEventListener('click', () => {
       if (state.allQuestions.length === 0) state.allQuestions = buildQuestionBank();
@@ -2043,9 +2121,16 @@ function startQuiz() {
     state.allQuestions = buildQuestionBank();
   }
   const count = state.selectedCount === 'All' ? state.allQuestions.length : state.selectedCount;
-  // rebuild and shuffle questions each time for quiz mode
-  const fresh = shuffle(buildQuestionBank());
-  state.questions = fresh.slice(0, Math.min(count, fresh.length));
+  // In fixed mode, drive every shuffle from a constant seed so the question
+  // set and answer-option order are identical on every attempt. In random
+  // mode, use Math.random() as before.
+  seededRng = state.randomize ? null : mulberry32(FIXED_SEED);
+  try {
+    const fresh = shuffle(buildQuestionBank());
+    state.questions = fresh.slice(0, Math.min(count, fresh.length));
+  } finally {
+    seededRng = null; // never leak the seeded stream into other modes
+  }
   state.current = 0;
   state.answers = [];
   state.answered = false;
